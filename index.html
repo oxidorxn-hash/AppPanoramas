@@ -479,6 +479,32 @@ function App() {
   }
   function openEvent(eventId) { setSelEv(eventId); setView('events'); }
 
+  // Auto-cancelación: cuando carga la app, cancela eventos en votación cuya fecha ya pasó y no alcanzaron el mínimo de síes
+  useEffect(function() {
+    if (loading) return;
+    var today = new Date().toISOString().slice(0,10);
+    var changed = false;
+    var next = events.map(function(e) {
+      if (e.status !== 'voting') return e;
+      if (e.date > today) return e;
+      var yesVotes = Object.values(e.votes).filter(function(v){return v==='yes';}).length;
+      if (yesVotes < (e.minVoters || 1)) {
+        changed = true;
+        return Object.assign({}, e, {status:'cancelled'});
+      }
+      return e;
+    });
+    if (changed) { setEvents(next); syncDB(members, next, gastos); }
+  }, [loading]);
+
+  // Deep link: abre evento directo si URL tiene ?event=ID
+  useEffect(function() {
+    if (loading) return;
+    var params = new URLSearchParams(window.location.search);
+    var eventId = params.get('event');
+    if (eventId) { setSelEv(eventId); setView('events'); }
+  }, [loading]);
+
   var currentEvent = events.find(function(e) { return e.id === selEv; });
 
   var TABS = [
@@ -755,12 +781,13 @@ function EventsView(props) {
   var onCancel=props.onCancel; var onReopen=props.onReopen;
   var t = useT();
 
+  var showHSt = useState(false); var showHistorial = showHSt[0]; var setShowHistorial = showHSt[1];
   var sorted    = events.slice().sort(function(a,b){return a.date<b.date?-1:1;});
-  var voting    = sorted.filter(function(e){return e.status==='voting';});
   var today = new Date().toISOString().slice(0,10);
+  var voting    = sorted.filter(function(e){return e.status==='voting';});
   var confirmed    = sorted.filter(function(e){return e.status==='confirmed' && e.date>=today;});
-  var finishedEvts = sorted.filter(function(e){return e.status==='confirmed' && e.date<today;}).reverse();
-  var cancelled    = sorted.filter(function(e){return e.status==='cancelled';});
+  var cancelled    = sorted.filter(function(e){return e.status==='cancelled' && e.date>=today;});
+  var historial = sorted.filter(function(e){return e.date<today && (e.status==='confirmed'||e.status==='cancelled');}).reverse();
 
   function renderItem(ev) {
     if (selEv === ev.id) {
@@ -787,16 +814,29 @@ function EventsView(props) {
                 {confirmed.map(renderItem)}
               </div>
             )}
-            {finishedEvts.length>0 && (
-              <div style={{ marginTop:(voting.length>0||confirmed.length>0)?22:0 }}>
-                <SectionHeader label={'🏁  REALIZADOS  · '+finishedEvts.length} mt={0} />
-                {finishedEvts.map(renderItem)}
-              </div>
-            )}
             {cancelled.length>0 && (
-              <div style={{ marginTop:(voting.length>0||confirmed.length>0||finishedEvts.length>0)?22:0 }}>
+              <div style={{ marginTop:(voting.length>0||confirmed.length>0)?22:0 }}>
                 <SectionHeader label={'❌  CANCELADOS  · '+cancelled.length} mt={0} />
                 {cancelled.map(renderItem)}
+              </div>
+            )}
+            {historial.length>0 && (
+              <div style={{ marginTop:(voting.length>0||confirmed.length>0||cancelled.length>0)?28:0 }}>
+                <button onClick={function(){setShowHistorial(function(v){return !v;});}}
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:8, background:'none', border:'none', cursor:'pointer', padding:'8px 0', marginBottom:showHistorial?10:0 }}>
+                  <div style={{ flex:1, height:1, background:t.border }} />
+                  <span style={{ fontSize:10, fontWeight:700, color:t.textMuted, letterSpacing:'0.1em', whiteSpace:'nowrap' }}>
+                    {showHistorial?'▲':'▼'} HISTORIAL ({historial.length})
+                  </span>
+                  <div style={{ flex:1, height:1, background:t.border }} />
+                </button>
+                {showHistorial && historial.map(function(ev) {
+                  return (
+                    <div key={ev.id} style={{ opacity:0.6 }}>
+                      {renderItem(ev)}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -958,6 +998,18 @@ function EventDetail(props) {
   var gastosCount = gastosArr.filter(function(g){ return g.eventId===ev.id; }).length;
   var showCalState = useState(false); var showCal = showCalState[0]; var setShowCal = showCalState[1];
   var cwState = useState(''); var confirmWarn = cwState[0]; var setConfirmWarn = cwState[1];
+  var copiedSt = useState(false); var copied = copiedSt[0]; var setCopied = copiedSt[1];
+  function handleShare() {
+    var url = window.location.origin + window.location.pathname + '?event=' + ev.id;
+    if (navigator.share) {
+      navigator.share({ title: ev.title, text: 'Vota el panorama: ' + ev.title, url: url });
+    } else {
+      navigator.clipboard.writeText(url).then(function() {
+        setCopied(true);
+        setTimeout(function(){ setCopied(false); }, 2000);
+      });
+    }
+  }
   var t   = useT();
   var cat = getCat(ev);
   var excl = ev.excluded || [];
@@ -980,6 +1032,7 @@ function EventDetail(props) {
         {!inline && <ActionBtn onClick={onBack} style={{ paddingLeft:12, paddingRight:12, fontSize:12, borderRadius:10 }}>← Volver</ActionBtn>}
         <div style={{ flex:1 }}></div>
         {inline && <ActionBtn onClick={onBack} style={{ paddingLeft:10, paddingRight:10, fontSize:13, borderRadius:10 }}>▲</ActionBtn>}
+        <ActionBtn onClick={handleShare} color={copied?t.successText:t.textSub} bg={copied?t.successBg:'transparent'} bd={copied?t.successBorder:t.border} style={{ paddingLeft:11, paddingRight:11, fontSize:12, borderRadius:10 }}>{copied?'✓ Copiado':'🔗 Compartir'}</ActionBtn>
         <ActionBtn onClick={onEdit} color={t.primary} bg={t.primaryBg} bd={t.primaryBorder} style={{ paddingLeft:12, paddingRight:12, fontSize:12, borderRadius:10 }}>✏️ Editar</ActionBtn>
         {onGastos && (
           <ActionBtn onClick={function(){onGastos(ev.id);}} style={{ paddingLeft:11, paddingRight:11, fontSize:12, borderRadius:10 }}>
@@ -1388,6 +1441,7 @@ function EventModal(props) {
   var absSt=useState(abs0); var editAbsent=absSt[0]; var setEditAbsent=absSt[1];
   var votes0 = (initial&&initial.votes)?Object.assign({},initial.votes):{};
   var votesSt=useState(votes0); var editVotes=votesSt[0]; var setEditVotes=votesSt[1];
+  var mvs=useState(initial?initial.minVoters||1:Math.max(1,Math.ceil((members.length||2)/2))); var minVoters=mvs[0]; var setMinVoters=mvs[1];
   var valid = title.trim()!=='' && eventDate!=='';
 
   function toggleAbs(mid) {
@@ -1405,7 +1459,7 @@ function EventModal(props) {
 
   function handleSave() {
     if (!valid) return;
-    var payload = { title:title.trim(), category:category, date:eventDate, time:eventTime, description:description.trim(), location:location.trim() };
+    var payload = { title:title.trim(), category:category, date:eventDate, time:eventTime, description:description.trim(), location:location.trim(), minVoters:minVoters };
     if (category === 'custom') { payload.customEmoji = customEmoji || '✨'; payload.customLabel = customLabel.trim() || 'Otro'; }
     if (isConfirmed) payload.absent = editAbsent;
     if (isEdit && !isConfirmed) payload.votes = editVotes;
@@ -1481,6 +1535,19 @@ function EventModal(props) {
 
         <FieldLabel>Descripción (opcional)</FieldLabel>
         <textarea className="p-input" value={description} onChange={function(e){setDescription(e.target.value);}} placeholder="Detalles, qué llevar, etc..." rows={3} style={Object.assign({},inpSt(t),{resize:'vertical'})} />
+
+        {!isEdit && (
+          <div>
+            <FieldLabel>Mín. de "sí" para confirmar</FieldLabel>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, padding:'10px 14px', borderRadius:11, background:t.inputBg, border:'1px solid '+t.border }}>
+              <button className="p-btn" onClick={function(){setMinVoters(function(v){return Math.max(1,v-1);});}}
+                style={{ width:34, height:34, borderRadius:9, border:'1px solid '+t.border, background:t.surface, color:t.text, fontSize:20, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit', boxShadow:t.btnShadow }}>−</button>
+              <div style={{ flex:1, textAlign:'center', fontFamily:"'Space Mono',monospace", fontSize:22, fontWeight:800, color:t.primary }}>{minVoters}</div>
+              <button className="p-btn" onClick={function(){setMinVoters(function(v){return Math.min(members.length||99,v+1);});}}
+                style={{ width:34, height:34, borderRadius:9, border:'1px solid '+t.border, background:t.surface, color:t.text, fontSize:20, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit', boxShadow:t.btnShadow }}>+</button>
+            </div>
+          </div>
+        )}
 
         {isEdit && !isConfirmed && members.length>0 && (
           <div style={{ marginBottom:14 }}>
