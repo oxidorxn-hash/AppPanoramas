@@ -1,0 +1,2114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Detox — Panoramas</title>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBqCpqqBdDoZerKAlId2HrQ_0Le2dnUODE",
+      authDomain: "apppanoramas.firebaseapp.com",
+      projectId: "apppanoramas",
+      storageBucket: "apppanoramas.firebasestorage.app",
+      messagingSenderId: "232451268428",
+      appId: "1:232451268428:web:d379a01b493f1f685979e9"
+    });
+    var db = firebase.firestore();
+    var DB_DOC = db.collection('panoramas').doc('shared');
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { font-family: 'Outfit', sans-serif; -webkit-font-smoothing: antialiased; }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.4; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { border-radius: 4px; background: #333; }
+
+    .p-btn        { transition: all 0.15s ease; }
+    .p-btn:hover  { filter: brightness(1.1); transform: translateY(-1px); }
+    .p-btn:active { filter: brightness(0.95); transform: translateY(0); }
+
+    .p-card        { transition: border-color 0.15s, box-shadow 0.15s; }
+    .p-card:hover  { border-color: rgba(0,210,190,0.35) !important; }
+
+    .p-nav-btn { transition: all 0.18s ease; }
+
+    .cal-day        { transition: all 0.12s ease; }
+    .cal-day:hover  { filter: brightness(1.15); transform: scale(1.04); }
+    .cal-day:active { transform: scale(0.97); }
+
+    .modal-sheet { animation: sheetUp 0.28s cubic-bezier(0.34,1.56,0.64,1); }
+    @keyframes sheetUp { from { transform: translateY(100%); opacity:0; } to { transform: translateY(0); opacity:1; } }
+
+    /* Event expand animation */
+    .ev-expand { animation: evExpand 0.55s cubic-bezier(0.16,1,0.3,1); }
+    @keyframes evExpand { from { opacity:0; transform:translateY(-20px) scale(0.95); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+    .p-input:focus { outline: none; border-color: #00D2BE !important; box-shadow: 0 0 0 3px rgba(0,210,190,0.15) !important; }
+    .p-tag { font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 5px; display: inline-block; }
+
+    /* Responsive date-time row in modal */
+    .dt-row { display:flex; gap:10px; }
+    .dt-row > div { flex:1; min-width:0; }
+    @media (max-width:380px) { .dt-row { flex-direction:column; } }
+
+    /* Splash screen */
+    @keyframes splashPulse { 0%,100%{transform:scale(1);opacity:0.15} 50%{transform:scale(1.5);opacity:0.35} }
+    @keyframes splashFadeIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    .splash-ring { animation: splashPulse 2s ease-in-out infinite; }
+    .splash-logo { animation: splashFadeIn 0.6s ease 0.2s both; }
+    .splash-text { animation: splashFadeIn 0.6s ease 0.5s both; }
+
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+var useState      = React.useState;
+var useEffect     = React.useEffect;
+var useMemo       = React.useMemo;
+var useContext    = React.useContext;
+var createContext = React.createContext;
+
+// ── DESIGN TOKENS ──────────────────────────────────────────
+var DARK = {
+  bg: '#0C0C0C', surface: '#181818', surfaceHover: '#202020',
+  surfaceElevated: '#1E1E1E',
+  border: '#282828', borderLight: '#323232',
+  text: '#F2F2F2', textSub: '#909090', textMuted: '#505050',
+  primary: '#00D2BE', primaryBg: 'rgba(0,210,190,0.1)', primaryBorder: 'rgba(0,210,190,0.3)',
+  navBg: '#111111', modalBg: '#161616', inputBg: '#212121', inputBorder: '#2E2E2E',
+  chipBg: '#1C1C1C', chipBorder: 'rgba(0,210,190,0.3)', chipText: '#00D2BE',
+  danger: '#FF4455', dangerBg: 'rgba(255,68,85,0.1)', dangerBorder: 'rgba(255,68,85,0.25)', dangerText: '#FF4455',
+  success: '#00C853', successBg: 'rgba(0,200,83,0.1)', successBorder: 'rgba(0,200,83,0.25)', successText: '#00C853',
+  warning: '#FFB300', warningBg: 'rgba(255,179,0,0.1)', warningBorder: 'rgba(255,179,0,0.25)', warningText: '#FFB300',
+  divider: '#1E1E1E',
+  cardShadow: '0 2px 8px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.3)',
+  btnShadow: '0 2px 6px rgba(0,0,0,0.4)',
+  primaryShadow: '0 3px 12px rgba(0,210,190,0.3)',
+  modalShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+  bgPattern: 'radial-gradient(ellipse 520px 420px at 10% 8%, rgba(0,210,190,0.14) 0%, transparent 60%), radial-gradient(ellipse 420px 380px at 90% 5%, rgba(124,77,255,0.11) 0%, transparent 55%), radial-gradient(ellipse 600px 320px at 50% 100%, rgba(0,180,160,0.09) 0%, transparent 60%), radial-gradient(ellipse 340px 340px at 88% 58%, rgba(255,64,129,0.06) 0%, transparent 50%)',
+  bgSize: '100% 100%',
+  isDark: true
+};
+var LIGHT = {
+  bg: '#F0F0F0', surface: '#FFFFFF', surfaceHover: '#F8F8F8',
+  surfaceElevated: '#FAFAFA',
+  border: '#E4E4E4', borderLight: '#EEEEEE',
+  text: '#111111', textSub: '#555555', textMuted: '#AAAAAA',
+  primary: '#00A89A', primaryBg: 'rgba(0,168,154,0.08)', primaryBorder: 'rgba(0,168,154,0.3)',
+  navBg: '#FFFFFF', modalBg: '#FFFFFF', inputBg: '#F5F5F5', inputBorder: '#E0E0E0',
+  chipBg: 'rgba(0,168,154,0.08)', chipBorder: 'rgba(0,168,154,0.25)', chipText: '#00A89A',
+  danger: '#E53935', dangerBg: 'rgba(229,57,53,0.07)', dangerBorder: 'rgba(229,57,53,0.2)', dangerText: '#E53935',
+  success: '#2E7D32', successBg: 'rgba(46,125,50,0.07)', successBorder: 'rgba(46,125,50,0.2)', successText: '#2E7D32',
+  warning: '#E65100', warningBg: 'rgba(230,81,0,0.07)', warningBorder: 'rgba(230,81,0,0.2)', warningText: '#E65100',
+  divider: '#EBEBEB',
+  cardShadow: '0 1px 4px rgba(0,0,0,0.07), 0 2px 8px rgba(0,0,0,0.04)',
+  btnShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  primaryShadow: '0 3px 12px rgba(0,168,154,0.25)',
+  modalShadow: '0 -4px 24px rgba(0,0,0,0.12)',
+  bgPattern: 'radial-gradient(ellipse 520px 420px at 10% 8%, rgba(0,168,154,0.13) 0%, transparent 60%), radial-gradient(ellipse 420px 380px at 90% 5%, rgba(124,77,255,0.08) 0%, transparent 55%), radial-gradient(ellipse 600px 320px at 50% 100%, rgba(0,150,136,0.08) 0%, transparent 60%), radial-gradient(ellipse 340px 340px at 88% 58%, rgba(255,64,129,0.05) 0%, transparent 50%)',
+  bgSize: '100% 100%',
+  isDark: false
+};
+
+var ThemeCtx = createContext(DARK);
+function useT() { return useContext(ThemeCtx); }
+
+// ── DATA ───────────────────────────────────────────────────
+var FERIADOS = [
+  { date:'2026-01-01', name:'Año Nuevo',             type:'irrenunciable' },
+  { date:'2026-04-03', name:'Viernes Santo',         type:'religioso' },
+  { date:'2026-04-04', name:'Sábado Santo',          type:'religioso' },
+  { date:'2026-05-01', name:'Día del Trabajo',       type:'irrenunciable' },
+  { date:'2026-05-21', name:'Glorias Navales',       type:'civil' },
+  { date:'2026-06-21', name:'Pueblos Indígenas',     type:'civil' },
+  { date:'2026-06-29', name:'San Pedro y San Pablo', type:'religioso' },
+  { date:'2026-07-16', name:'Virgen del Carmen',     type:'religioso' },
+  { date:'2026-08-15', name:'Asunción de la Virgen', type:'religioso' },
+  { date:'2026-09-18', name:'Independencia Nacional', type:'irrenunciable' },
+  { date:'2026-09-19', name:'Glorias del Ejército',  type:'irrenunciable' },
+  { date:'2026-10-12', name:'Encuentro Dos Mundos',  type:'civil' },
+  { date:'2026-10-31', name:'Iglesias Evangélicas',  type:'religioso' },
+  { date:'2026-11-01', name:'Todos los Santos',      type:'religioso' },
+  { date:'2026-12-08', name:'Inmaculada Concepción', type:'religioso' },
+  { date:'2026-12-25', name:'Navidad',               type:'irrenunciable' }
+];
+var CATS = [
+  { id:'carrete',       label:'Carrete',       emoji:'🎉', color:'#E040FB' },
+  { id:'asado',         label:'Asado',         emoji:'🔥', color:'#FF6D00' },
+  { id:'deporte',       label:'Deporte',       emoji:'⚽', color:'#00C853' },
+  { id:'playa',         label:'Playa',         emoji:'🏖️', color:'#00B0FF' },
+  { id:'panorama_sano', label:'Panorama Sano', emoji:'🌿', color:'#69F0AE' },
+  { id:'marivuelta',    label:'Marivuelta',    emoji:'🍀', color:'#76FF03' },
+  { id:'gamer',         label:'Gamer',         emoji:'🎮', color:'#7C4DFF' }
+];
+var AVATARS = [
+  '😎','🤙','🧑‍🎤','🥷','🤠','🎅','🧙','🦸','🧛','🥸','🤡','👽','🤖','🎭',
+  '🦊','🐻','🦁','🐯','🐺','🦅','🦋','🐸','🦄','🐧','🐼','🐨','🦒','🐙',
+  '🦑','🦜','🐬','🦈','🐉','🦩','🐶','🐱','🦖','🐮','🐷','🦀','🦞','🦧',
+  '🔥','⚡','💎','🌟','🌈','❄️','🌊','🍀','🎯','🎲','🏆','🎸','🍕','🍺',
+  '🚀','💀','👾','🎪','🪄','🏴‍☠️','🌵','🍄','🌙','☄️','🔮','🪩','🎰','🌺'
+];
+var MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// ── UTILS ──────────────────────────────────────────────────
+function genId() { return Date.now().toString(36) + Math.random().toString(36).substr(2,5); }
+function getCat(ev) {
+  if (!ev) return null;
+  if (ev.category === 'custom') return { id:'custom', emoji:ev.customEmoji||'✨', label:ev.customLabel||'Otro', color:'#888' };
+  return CATS.find(function(c){ return c.id === ev.category; }) || null;
+}
+function fmtCLP(n) { return '$' + Math.round(n || 0).toLocaleString('es-CL'); }
+function fmtDate(s) {
+  var d = new Date(s + 'T12:00:00');
+  return d.toLocaleDateString('es-CL', { weekday:'short', day:'numeric', month:'short' });
+}
+function daysInMonth(y, m) { return new Date(y, m+1, 0).getDate(); }
+function firstDay(y, m)    { var d = new Date(y, m, 1).getDay(); return d === 0 ? 6 : d-1; }
+function dKey(y, m, d)     { return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+function todayKey()        { var n = new Date(); return dKey(n.getFullYear(), n.getMonth(), n.getDate()); }
+function load(k, fb)       { try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : fb; } catch(e) { return fb; } }
+function save(k, v)        { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {} }
+
+// Calendar export helpers
+function googleCalUrl(ev) {
+  var d = ev.date.replace(/-/g, '');
+  // end date = next day for all-day event
+  var nd = new Date(ev.date + 'T12:00:00');
+  nd.setDate(nd.getDate() + 1);
+  var ed = nd.getFullYear() + String(nd.getMonth()+1).padStart(2,'0') + String(nd.getDate()).padStart(2,'0');
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    + '&text=' + encodeURIComponent(ev.title)
+    + '&dates=' + d + '/' + ed
+    + '&details=' + encodeURIComponent(ev.description || '')
+    + '&location=' + encodeURIComponent(ev.location || '');
+}
+function downloadICS(ev) {
+  var d = ev.date.replace(/-/g, '');
+  var nd = new Date(ev.date + 'T12:00:00');
+  nd.setDate(nd.getDate() + 1);
+  var ed = nd.getFullYear() + String(nd.getMonth()+1).padStart(2,'0') + String(nd.getDate()).padStart(2,'0');
+  var stamp = new Date().toISOString().replace(/[-:.]/g,'').slice(0,15) + 'Z';
+  var ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Detox Panoramas//ES\r\nBEGIN:VEVENT\r\n'
+    + 'DTSTART;VALUE=DATE:' + d + '\r\n'
+    + 'DTEND;VALUE=DATE:' + ed + '\r\n'
+    + 'DTSTAMP:' + stamp + '\r\n'
+    + 'SUMMARY:' + ev.title + '\r\n'
+    + 'DESCRIPTION:' + (ev.description || '') + '\r\n'
+    + 'LOCATION:' + (ev.location || '') + '\r\n'
+    + 'END:VEVENT\r\nEND:VCALENDAR';
+  var blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = ev.title.replace(/\s+/g,'_') + '.ics'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── LOGO SVG ───────────────────────────────────────────────
+function DetoxLogo(props) {
+  var color = props.color || '#00D2BE';
+  var h = props.height || 52;
+  var w = h * (370 / 100);
+  return (
+    <svg width={w} height={h} viewBox="0 0 370 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lglass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.04"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0.22"/>
+        </linearGradient>
+        <linearGradient id="lliquid" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0.55"/>
+        </linearGradient>
+      </defs>
+
+      {/* ── COCKTAIL GLASS ── */}
+      {/* Glass body */}
+      <path d="M8 18 L64 18 L53 87 L19 87 Z" fill="url(#lglass)" stroke={color} strokeWidth="2.2" strokeLinejoin="round"/>
+      {/* Liquid fill */}
+      <path d="M13 46 L59 41 L53 87 L19 87 Z" fill="url(#lliquid)"/>
+      {/* Highlight streak */}
+      <line x1="18" y1="50" x2="22" y2="84" stroke={color} strokeOpacity="0.18" strokeWidth="3" strokeLinecap="round"/>
+      {/* Stem */}
+      <line x1="36" y1="87" x2="36" y2="96" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Base */}
+      <line x1="23" y1="96" x2="49" y2="96" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Straw */}
+      <line x1="46" y1="18" x2="59" y2="2" stroke={color} strokeWidth="3" strokeLinecap="round"/>
+      {/* Lime — circle */}
+      <circle cx="63" cy="14" r="9" stroke={color} strokeWidth="1.8" fill={color} fillOpacity="0.07"/>
+      {/* Lime — segments */}
+      <line x1="63" y1="5" x2="63" y2="23" stroke={color} strokeWidth="1.1" strokeOpacity="0.45"/>
+      <line x1="54.5" y1="9.5" x2="71.5" y2="18.5" stroke={color} strokeWidth="1.1" strokeOpacity="0.45"/>
+      <line x1="54.5" y1="18.5" x2="71.5" y2="9.5" stroke={color} strokeWidth="1.1" strokeOpacity="0.45"/>
+      {/* Bubbles */}
+      <circle cx="25" cy="68" r="2.8" stroke={color} strokeWidth="1.4" strokeOpacity="0.5"/>
+      <circle cx="38" cy="76" r="1.9" stroke={color} strokeWidth="1.4" strokeOpacity="0.38"/>
+      <circle cx="47" cy="62" r="2.2" stroke={color} strokeWidth="1.4" strokeOpacity="0.45"/>
+      <circle cx="31" cy="55" r="1.5" stroke={color} strokeWidth="1.2" strokeOpacity="0.3"/>
+
+      {/* ── DETOX TEXT ── */}
+      <text x="82" y="80" fontFamily="Outfit, sans-serif" fontSize="70" fontWeight="800" fill={color} letterSpacing="-2">Detox</text>
+
+      {/* ── BEER MUG ── */}
+      {/* Body */}
+      <path d="M292 16 L333 16 L333 88 Q312 99 292 88 Z" fill="url(#lglass)" stroke={color} strokeWidth="2.2" strokeLinejoin="round"/>
+      {/* Liquid fill */}
+      <path d="M295 34 L330 28 L330 88 Q312 99 295 88 Z" fill="url(#lliquid)"/>
+      {/* Highlight */}
+      <line x1="298" y1="38" x2="301" y2="85" stroke={color} strokeOpacity="0.18" strokeWidth="3" strokeLinecap="round"/>
+      {/* Handle */}
+      <path d="M333 30 Q360 30 360 56 Q360 82 333 76" stroke={color} strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+      {/* Foam blobs */}
+      <ellipse cx="294" cy="15" rx="5.5" ry="6.5" fill={color} fillOpacity="0.7"/>
+      <ellipse cx="305" cy="11" rx="7" ry="8" fill={color} fillOpacity="0.82"/>
+      <ellipse cx="318" cy="10" rx="8" ry="9" fill={color} fillOpacity="0.9"/>
+      <ellipse cx="330" cy="12" rx="6" ry="7" fill={color} fillOpacity="0.75"/>
+      {/* Foam drip */}
+      <path d="M310 18 Q312 24 314 18" fill={color} fillOpacity="0.5"/>
+      {/* Bubbles */}
+      <circle cx="304" cy="74" r="2.8" stroke={color} strokeWidth="1.4" strokeOpacity="0.5"/>
+      <circle cx="318" cy="60" r="2" stroke={color} strokeWidth="1.4" strokeOpacity="0.4"/>
+      <circle cx="310" cy="46" r="1.8" stroke={color} strokeWidth="1.3" strokeOpacity="0.5"/>
+      <circle cx="323" cy="76" r="1.5" stroke={color} strokeWidth="1.2" strokeOpacity="0.35"/>
+    </svg>
+  );
+}
+
+// ── MAIN APP ───────────────────────────────────────────────
+function App() {
+  var s1 = useState(function() { return load('pan-dark', true); });
+  var dark = s1[0]; var setDark = s1[1];
+  var s2 = useState([]); var members = s2[0]; var setMembers = s2[1];
+  var s3 = useState([]); var events = s3[0]; var setEvents = s3[1];
+  var s_ld = useState(true); var loading = s_ld[0]; var setLoading = s_ld[1];
+  var s4 = useState('calendar');
+  var view = s4[0]; var setView = s4[1];
+  var s5 = useState(function() { var n = new Date(); return { y:n.getFullYear(), m:n.getMonth() }; });
+  var ym = s5[0]; var setYm = s5[1];
+  var s6 = useState(null); var selEv = s6[0]; var setSelEv = s6[1];
+  var s7 = useState(null); var selDate = s7[0]; var setSelDate = s7[1];
+  var s8 = useState(false); var showNew = s8[0]; var setShowNew = s8[1];
+  var s9 = useState(false); var showEdit = s9[0]; var setShowEdit = s9[1];
+  var s10 = useState(false); var showAddM = s10[0]; var setShowAddM = s10[1];
+  var s11 = useState([]); var gastos = s11[0]; var setGastos = s11[1];
+  var s12 = useState(null); var gastosFilter = s12[0]; var setGastosFilter = s12[1];
+  var s13 = useState(false); var showAddG = s13[0]; var setShowAddG = s13[1];
+  var s14 = useState(null); var editMemberId = s14[0]; var setEditMemberId = s14[1];
+  var s15 = useState(null); var editGastoId = s15[0]; var setEditGastoId = s15[1];
+
+  var t = dark ? DARK : LIGHT;
+
+  useEffect(function() { save('pan-dark', dark); }, [dark]);
+
+  // ── Firestore real-time sync ──
+  useEffect(function() {
+    var unsub = DB_DOC.onSnapshot(function(doc) {
+      if (doc.exists) {
+        var d = doc.data();
+        setMembers(d.members || []);
+        setEvents(d.events || []);
+        setGastos(d.gastos || []);
+      }
+      setLoading(false);
+    }, function(err) {
+      console.error('Firestore:', err);
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  function syncDB(newMembers, newEvents, newGastos) {
+    DB_DOC.set({ members: newMembers, events: newEvents, gastos: newGastos !== undefined ? newGastos : gastos });
+  }
+
+  var feriadoMap = useMemo(function() {
+    var m = {}; FERIADOS.forEach(function(f) { m[f.date] = f; }); return m;
+  }, []);
+  var eventsByDate = useMemo(function() {
+    var m = {}; events.forEach(function(e) { if (!m[e.date]) m[e.date] = []; m[e.date].push(e); }); return m;
+  }, [events]);
+  var absences = useMemo(function() {
+    var c = {}; members.forEach(function(m) { c[m.id] = 0; });
+    events.forEach(function(ev) {
+      if (ev.status === 'confirmed') {
+        var excl = ev.excluded || [];
+        members.forEach(function(m) {
+          if (excl.indexOf(m.id) >= 0) return;
+          if (ev.votes[m.id] === 'yes' && ev.absent && ev.absent.indexOf(m.id) >= 0) c[m.id] = (c[m.id]||0)+1;
+        });
+      }
+    });
+    return c;
+  }, [events, members]);
+  var bombas = useMemo(function() {
+    var c = {}; members.forEach(function(m) { c[m.id] = 0; });
+    events.forEach(function(ev) {
+      if (ev.status === 'confirmed' && ev.bomba) {
+        ev.bomba.forEach(function(mid) { if (c[mid]!==undefined) c[mid] = (c[mid]||0)+1; });
+      }
+    });
+    return c;
+  }, [events, members]);
+
+  function addMember(name, avatar, birthday) {
+    var next = members.concat([{ id:genId(), name:name, avatar:avatar, birthday:birthday||'' }]);
+    setMembers(next); syncDB(next, events, gastos);
+  }
+  function removeMember(id) {
+    var next = members.filter(function(m) { return m.id !== id; });
+    setMembers(next); syncDB(next, events, gastos);
+  }
+  function updateMember(id, name, avatar, birthday) {
+    var next = members.map(function(m) { return m.id===id ? Object.assign({},m,{name:name,avatar:avatar,birthday:birthday||''}) : m; });
+    setMembers(next); syncDB(next, events, gastos);
+  }
+  function addEvent(ev) {
+    var next = events.concat([Object.assign({}, ev, { id:genId(), votes:{}, absent:[], bomba:[], excluded:[], plusOne:{}, status:'voting' })]);
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function updateEvent(id, ch) {
+    var next = events.map(function(e) { return e.id===id ? Object.assign({},e,ch) : e; });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function voteEvent(eid, mid, v) {
+    var next = events.map(function(e) { if (e.id!==eid) return e; var vt=Object.assign({},e.votes); vt[mid] = vt[mid]===v ? null : v; return Object.assign({},e,{votes:vt}); });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function confirmEvent(eid) {
+    var next = events.map(function(e) {
+      if (e.id!==eid) return e;
+      var excl = e.excluded || [];
+      var active = members.filter(function(m){ return excl.indexOf(m.id) < 0; });
+      var preAbsent = active.filter(function(m){ return e.votes[m.id]==='no'; }).map(function(m){ return m.id; });
+      var preBomba  = active.filter(function(m){ return !e.votes[m.id]; }).map(function(m){ return m.id; });
+      return Object.assign({},e,{status:'confirmed', absent:preAbsent, bomba:preBomba});
+    });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function deleteEvent(eid) {
+    var next = events.filter(function(e) { return e.id!==eid; });
+    setEvents(next); setSelEv(null); syncDB(members, next, gastos);
+  }
+  function markAbsent(eid, mid) {
+    var next = events.map(function(e) {
+      if (e.id!==eid) return e;
+      var inAbsent = e.absent.indexOf(mid)>=0;
+      var abs = inAbsent ? e.absent.filter(function(a){return a!==mid;}) : e.absent.concat([mid]);
+      var bmb = inAbsent ? (e.bomba||[]) : (e.bomba||[]).filter(function(a){return a!==mid;});
+      return Object.assign({},e,{absent:abs,bomba:bmb});
+    });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function markBomba(eid, mid) {
+    var next = events.map(function(e) {
+      if (e.id!==eid) return e;
+      var inBomba = (e.bomba||[]).indexOf(mid)>=0;
+      var bmb = inBomba ? (e.bomba||[]).filter(function(a){return a!==mid;}) : (e.bomba||[]).concat([mid]);
+      var abs = inBomba ? e.absent : e.absent.filter(function(a){return a!==mid;});
+      return Object.assign({},e,{bomba:bmb,absent:abs});
+    });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function markAsistio(eid, mid) {
+    var next = events.map(function(e) {
+      if (e.id!==eid) return e;
+      return Object.assign({},e,{absent:e.absent.filter(function(a){return a!==mid;}),bomba:(e.bomba||[]).filter(function(a){return a!==mid;})});
+    });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function excludeFromEvent(eid, mid) {
+    var next = events.map(function(e) {
+      if (e.id!==eid) return e;
+      var excl = (e.excluded||[]).concat([mid]);
+      var vt = Object.assign({},e.votes); delete vt[mid];
+      var abs = e.absent.filter(function(a){return a!==mid;});
+      var bmb = (e.bomba||[]).filter(function(a){return a!==mid;});
+      return Object.assign({},e,{excluded:excl,votes:vt,absent:abs,bomba:bmb});
+    });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function includeInEvent(eid, mid) {
+    var next = events.map(function(e) {
+      if (e.id!==eid) return e;
+      var excl = (e.excluded||[]).filter(function(a){return a!==mid;});
+      return Object.assign({},e,{excluded:excl});
+    });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function togglePlusOne(eid, mid) {
+    var next = events.map(function(e) {
+      if (e.id!==eid) return e;
+      var po = Object.assign({}, e.plusOne||{}); po[mid] = !po[mid];
+      return Object.assign({},e,{plusOne:po});
+    });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function addGasto(g) {
+    var next = gastos.concat([Object.assign({}, g, { id:genId(), date:new Date().toISOString().slice(0,10) })]);
+    setGastos(next); syncDB(members, events, next);
+  }
+  function removeGasto(id) {
+    var next = gastos.filter(function(g) { return g.id !== id; });
+    setGastos(next); syncDB(members, events, next);
+  }
+  function updateGasto(id, changes) {
+    var next = gastos.map(function(g) { return g.id===id ? Object.assign({},g,changes) : g; });
+    setGastos(next); syncDB(members, events, next);
+  }
+  function cancelEvent(eid) {
+    var next = events.map(function(e) { return e.id===eid ? Object.assign({},e,{status:'cancelled'}) : e; });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function reopenEvent(eid) {
+    var next = events.map(function(e) { return e.id===eid ? Object.assign({},e,{status:'voting'}) : e; });
+    setEvents(next); syncDB(members, next, gastos);
+  }
+  function goToGastos(eventId) {
+    setGastosFilter(eventId || null);
+    setView('gastos');
+  }
+  function openEvent(eventId) { setSelEv(eventId); setView('events'); }
+
+  var currentEvent = events.find(function(e) { return e.id === selEv; });
+
+  var TABS = [
+    { key:'calendar', label:'Calendario', icon:'📅' },
+    { key:'events',   label:'Panoramas',  icon:'🎯' },
+    { key:'gastos',   label:'Gastos',     icon:'💰' },
+    { key:'ranking',  label:'Corretiaos', icon:'💀' },
+    { key:'members',  label:'Grupo',      icon:'👥' }
+  ];
+
+  if (loading) return (
+    <ThemeCtx.Provider value={t}>
+      <div style={{ backgroundColor:t.bg, minHeight:'100vh', maxWidth:520, margin:'0 auto', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', position:'relative', overflow:'hidden' }}>
+        {/* Animated rings */}
+        <div className="splash-ring" style={{ position:'absolute', width:320, height:320, borderRadius:'50%', border:'1px solid '+t.primary, opacity:0.15, animationDelay:'0s' }} />
+        <div className="splash-ring" style={{ position:'absolute', width:220, height:220, borderRadius:'50%', border:'1px solid '+t.primary, opacity:0.2, animationDelay:'0.4s' }} />
+        <div className="splash-ring" style={{ position:'absolute', width:140, height:140, borderRadius:'50%', background:t.primaryBg, animationDelay:'0.8s' }} />
+        <div className="splash-logo" style={{ position:'relative', zIndex:1, marginBottom:24 }}>
+          <DetoxLogo height={56} color={t.primary} />
+        </div>
+        <div className="splash-text" style={{ position:'relative', zIndex:1, fontSize:11, color:t.textMuted, fontFamily:"'Space Mono',monospace", letterSpacing:'0.15em' }}>Cargando...</div>
+      </div>
+    </ThemeCtx.Provider>
+  );
+
+  return (
+    <ThemeCtx.Provider value={t}>
+      <div style={{ fontFamily:"'Outfit',sans-serif", backgroundColor:t.bg, backgroundImage:t.bgPattern, backgroundSize:'100% 100%', backgroundAttachment:'fixed', color:t.text, minHeight:'100vh', maxWidth:520, margin:'0 auto', position:'relative', transition:'background-color 0.3s, color 0.2s' }}>
+
+        {/* ── HEADER ── */}
+        <div style={{ padding:'40px 20px 16px', borderBottom:'1px solid '+t.border }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+
+            {/* Logo */}
+            <DetoxLogo height={48} color={t.primary} />
+
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              {/* Theme toggle */}
+              <button className="p-btn" onClick={function() { setDark(!dark); }}
+                style={{ background:t.surface, border:'1px solid '+t.border, borderRadius:10, width:38, height:38, fontSize:17, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:t.btnShadow }}>
+                {dark ? '☀️' : '🌙'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── CONTENT ── */}
+        <div style={{ padding:'0 14px 140px' }}>
+          {view==='calendar' && <CalendarView ym={ym} setYm={setYm} feriadoMap={feriadoMap} eventsByDate={eventsByDate} events={events} members={members} onSelectDate={function(d){setSelDate(d);setShowNew(true);}} onOpenEvent={openEvent} />}
+          {view==='events'   && <EventsView   events={events} members={members} gastos={gastos} onVote={voteEvent} onConfirm={confirmEvent} onMarkAbsent={markAbsent} onMarkBomba={markBomba} onMarkAsistio={markAsistio} onExclude={excludeFromEvent} onInclude={includeInEvent} onDelete={deleteEvent} onTogglePlusOne={togglePlusOne} onEdit={function(){setShowEdit(true);}} onGastos={goToGastos} onCancel={cancelEvent} onReopen={reopenEvent} selEv={selEv} setSelEv={setSelEv} />}
+          {view==='gastos'   && <GastosView   gastos={gastos} members={members} events={events} onRemove={removeGasto} onAdd={function(){setShowAddG(true);}} onEdit={function(id){setEditGastoId(id);}} onUpdate={updateGasto} filterEventId={gastosFilter} onClearFilter={function(){setGastosFilter(null);}} />}
+          {view==='ranking'  && <RankingView  members={members} absences={absences} bombas={bombas} events={events} />}
+          {view==='members'  && <MembersView  members={members} absences={absences} onAdd={function(){setShowAddM(true);}} onRemove={removeMember} onEdit={function(id){setEditMemberId(id);}} />}
+        </div>
+
+        {/* ── FAB ── */}
+        <button className="p-btn" onClick={function(){ if(view==='gastos'){setShowAddG(true);}else{setShowNew(true);} }}
+          style={{ position:'fixed', bottom:100, right:'max(16px, calc(50% - 244px))', width:52, height:52, borderRadius:'50%', border:'none', background:t.primary, color:t.isDark?'#000':'#fff', fontSize:28, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, boxShadow:t.primaryShadow, fontWeight:700 }}>+</button>
+
+        {/* ── BOTTOM NAV ── */}
+        <div style={{ position:'fixed', bottom:18, left:'50%', transform:'translateX(-50%)', display:'flex', background:t.navBg, border:'1px solid '+t.border, borderRadius:16, padding:'5px', gap:2, boxShadow:t.cardShadow, zIndex:100, maxWidth:400, width:'calc(100% - 32px)' }}>
+          {TABS.map(function(tab) {
+            var active = view === tab.key;
+            return (
+              <button key={tab.key} className="p-nav-btn" onClick={function(){setView(tab.key); setSelEv(null);}}
+                style={{ flex:1, padding:'9px 4px', border:'none', borderRadius:12, cursor:'pointer', fontSize:10, fontWeight:active?700:500, fontFamily:'inherit', background:active?t.primaryBg:'transparent', color:active?t.primary:t.textMuted, outline:active?('1px solid '+t.primaryBorder):'none', display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+                <span style={{ fontSize:19 }}>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {showNew  && <EventModal mode="create" date={selDate} initial={null} onClose={function(){setShowNew(false);setSelDate(null);}} onSave={function(ev){addEvent(ev);setShowNew(false);setSelDate(null);}} />}
+        {showEdit && currentEvent && <EventModal mode="edit" date={null} initial={currentEvent} members={members} onClose={function(){setShowEdit(false);}} onSave={function(ch){updateEvent(selEv,ch);setShowEdit(false);}} />}
+        {showAddM && <AddMemberModal onClose={function(){setShowAddM(false);}} onSave={function(n,a,b){addMember(n,a,b);setShowAddM(false);}} />}
+        {editMemberId && <EditMemberModal member={members.find(function(m){return m.id===editMemberId;})} onClose={function(){setEditMemberId(null);}} onSave={function(n,a,b){updateMember(editMemberId,n,a,b);setEditMemberId(null);}} />}
+        {showAddG && <GastosModal members={members} events={events} defaultEventId={gastosFilter} onClose={function(){setShowAddG(false);}} onSave={function(g){addGasto(g);setShowAddG(false);}} />}
+        {editGastoId && <GastosModal initial={gastos.find(function(g){return g.id===editGastoId;})} members={members} events={events} onClose={function(){setEditGastoId(null);}} onSave={function(payload){updateGasto(editGastoId,payload);setEditGastoId(null);}} />}
+      </div>
+    </ThemeCtx.Provider>
+  );
+}
+
+// ── CALENDAR VIEW ──────────────────────────────────────────
+function CalendarView(props) {
+  var ym=props.ym; var setYm=props.setYm; var feriadoMap=props.feriadoMap;
+  var eventsByDate=props.eventsByDate; var events=props.events; var members=props.members||[];
+  var onSelectDate=props.onSelectDate; var onOpenEvent=props.onOpenEvent;
+  var t  = useT();
+  var y  = ym.y; var m = ym.m;
+  var tk = todayKey();
+  var now = new Date();
+
+  function prev() { if (m===0){setYm({y:y-1,m:11});}else{setYm({y:y,m:m-1});} }
+  function next() { if (m===11){setYm({y:y+1,m:0});}else{setYm({y:y,m:m+1});} }
+  function goToday() { setYm({ y:now.getFullYear(), m:now.getMonth() }); }
+  var isCurrentMonth = y===now.getFullYear() && m===now.getMonth();
+
+  // Birthday map: key = MM-DD, value = [member, ...]
+  var bdMap = useMemo(function() {
+    var map = {};
+    members.forEach(function(mb) {
+      if (!mb.birthday) return;
+      var parts = mb.birthday.split('-'); // YYYY-MM-DD or MM-DD
+      var key = parts.length===3 ? (parts[1]+'-'+parts[2]) : mb.birthday;
+      if (!map[key]) map[key] = [];
+      map[key].push(mb);
+    });
+    return map;
+  }, [members]);
+
+  var days = daysInMonth(y,m);
+  var fd   = firstDay(y,m);
+  var cells = [];
+  for (var i=0;i<fd;i++) cells.push(null);
+  for (var d=1;d<=days;d++) cells.push(d);
+
+  var upcoming = events.filter(function(e){return e.date>=tk;}).sort(function(a,b){return a.date<b.date?-1:1;}).slice(0,5);
+  var upFer    = FERIADOS.filter(function(f){return f.date>=tk;}).slice(0,4);
+
+  return (
+    <div style={{ paddingTop:14 }}>
+      {/* Month nav */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+        <ActionBtn onClick={prev} width={36} height={36} style={{ fontSize:20, borderRadius:10, flexShrink:0 }}>‹</ActionBtn>
+        <div style={{ flex:1, background:t.surface, border:'1px solid '+t.border, borderRadius:12, padding:'10px 14px', textAlign:'center', boxShadow:t.cardShadow }}>
+          <div style={{ fontSize:17, fontWeight:700, color:t.text }}>{MONTHS[m]} <span style={{ color:t.textMuted }}>{y}</span></div>
+        </div>
+        <ActionBtn onClick={next} width={36} height={36} style={{ fontSize:20, borderRadius:10, flexShrink:0 }}>›</ActionBtn>
+        {/* Today button */}
+        {!isCurrentMonth && (
+          <button className="p-btn" onClick={goToday}
+            style={{ background:t.primaryBg, border:'1px solid '+t.primaryBorder, borderRadius:10, padding:'0 12px', height:36, fontSize:11, fontWeight:700, color:t.primary, cursor:'pointer', fontFamily:'inherit', flexShrink:0, boxShadow:t.btnShadow, whiteSpace:'nowrap' }}>
+            Hoy
+          </button>
+        )}
+      </div>
+
+      {/* Day headers */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3, marginBottom:4 }}>
+        {['Lu','Ma','Mi','Ju','Vi','Sá','Do'].map(function(day) {
+          return <div key={day} style={{ fontSize:10, fontWeight:700, color:t.textMuted, textAlign:'center', padding:'3px 0', fontFamily:"'Space Mono',monospace" }}>{day}</div>;
+        })}
+      </div>
+
+      {/* Grid */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3 }}>
+        {cells.map(function(day, idx) {
+          if (!day) return <div key={'e'+idx} />;
+          var dk   = dKey(y,m,day);
+          var fer  = feriadoMap[dk];
+          var evts = eventsByDate[dk]||[];
+          var isT  = dk===tk;
+          var isWk = (idx%7===5)||(idx%7===6);
+          var mmdd = String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+          var bds  = bdMap[mmdd]||[];
+          var wkBg  = t.isDark ? 'rgba(255,160,80,0.07)' : 'rgba(255,140,50,0.08)';
+          var wkCol = t.isDark ? '#D4845A' : '#B85C10';
+          var bg   = isT ? t.primary : fer ? t.dangerBg : evts.length>0 ? t.primaryBg : isWk ? wkBg : t.surface;
+          var col  = isT ? (t.isDark?'#000':'#fff') : fer ? t.dangerText : isWk ? wkCol : t.text;
+          var bd   = isT ? 'none' : bds.length>0 ? '1px solid rgba(255,100,200,0.4)' : fer ? ('1px solid '+t.dangerBorder) : isWk ? ('1px solid rgba(255,140,50,0.2)') : ('1px solid '+t.border);
+          var sh   = isT ? t.primaryShadow : evts.length>0 ? '0 0 0 1px '+t.primaryBorder : t.cardShadow;
+          return (
+            <button key={dk} className="cal-day" onClick={function(){onSelectDate(dk);}}
+              style={{ padding:'7px 2px 9px', borderRadius:10, border:bd, background:bg, cursor:'pointer', color:col, fontFamily:"'Space Mono',monospace", fontSize:12, fontWeight:isT?900:400, minHeight:50, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:2, boxShadow:sh }}>
+              <span>{day}</span>
+              {bds.length>0 && <span style={{ fontSize:9 }}>🎂</span>}
+              {fer && !bds.length && <span style={{ fontSize:6, maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block', opacity:0.8, padding:'0 1px' }}>{fer.name.split(' ')[0]}</span>}
+              {evts.length>0 && (
+                <div style={{ display:'flex', gap:1 }}>
+                  {evts.slice(0,3).map(function(e){
+                    var cat=getCat(e);
+                    return <span key={e.id} style={{ fontSize:8 }}>{cat?cat.emoji:''}</span>;
+                  })}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Upcoming events */}
+      <SectionHeader label="PRÓXIMOS EVENTOS" mt={22} />
+      {upcoming.length===0
+        ? <EmptyBox text="Sin eventos — crea uno con el botón +" />
+        : upcoming.map(function(ev) {
+            var cat   = getCat(ev);
+            var yes   = Object.values(ev.votes).filter(function(v){return v==='yes';}).length;
+            var no    = Object.values(ev.votes).filter(function(v){return v==='no';}).length;
+            var maybe = Object.values(ev.votes).filter(function(v){return v==='maybe';}).length;
+            var pl    = Object.values(ev.plusOne||{}).filter(Boolean).length;
+            var isV   = ev.status==='voting';
+            return (
+              <div key={ev.id} className="p-card" onClick={function(){onOpenEvent(ev.id);}}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 13px', marginBottom:6, borderRadius:12, background:t.surface, border:'1px solid '+t.border, cursor:'pointer', boxShadow:t.cardShadow }}>
+                <div style={{ width:38, height:38, borderRadius:9, background:(cat?cat.color:'#888')+'20', border:'1px solid '+(cat?cat.color:'#888')+'40', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>{cat?cat.emoji:'📌'}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:t.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.title}</div>
+                  <div style={{ fontSize:10, color:t.textMuted, fontFamily:"'Space Mono',monospace" }}>{fmtDate(ev.date)}</div>
+                  <div style={{ display:'flex', gap:6, marginTop:3 }}>
+                    {yes>0   && <span style={{ fontSize:9, color:t.successText, fontWeight:700 }}>👍{yes}</span>}
+                    {maybe>0 && <span style={{ fontSize:9, color:t.warningText, fontWeight:700 }}>🤔{maybe}</span>}
+                    {no>0    && <span style={{ fontSize:9, color:t.dangerText,  fontWeight:700 }}>👎{no}</span>}
+                  </div>
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5 }}>
+                  <span className="p-tag" style={{ background:isV?t.warningBg:t.successBg, color:isV?t.warningText:t.successText, border:'1px solid '+(isV?t.warningBorder:t.successBorder) }}>
+                    {isV?'VOTANDO':'LISTO'}
+                  </span>
+                  {pl>0 && <span style={{ fontSize:9, color:t.textMuted }}>👫 +{pl}</span>}
+                </div>
+              </div>
+            );
+          })
+      }
+
+      {/* Cumpleaños del mes */}
+      {(function() {
+        var mmPre = String(m+1).padStart(2,'0')+'-';
+        var monthBds = [];
+        Object.keys(bdMap).forEach(function(key) {
+          if (key.indexOf(mmPre) === 0) {
+            var day = parseInt(key.split('-')[1]);
+            var isToday = y===now.getFullYear() && m===now.getMonth() && day===now.getDate();
+            bdMap[key].forEach(function(mb) { monthBds.push({ mb:mb, day:day, isToday:isToday }); });
+          }
+        });
+        monthBds.sort(function(a,b){ return a.day - b.day; });
+        if (!monthBds.length) return null;
+        return (
+          <div>
+            <SectionHeader label={'🎂  CUMPLEAÑOS — '+MONTHS[m].toUpperCase()} mt={18} />
+            {monthBds.map(function(x) {
+              return (
+                <div key={x.mb.id+x.day} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 13px', marginBottom:5, borderRadius:10, background:x.isToday?'rgba(255,100,200,0.12)':'rgba(255,100,200,0.06)', border:'1px solid rgba(255,100,200,'+(x.isToday?'0.4':'0.2')+')', boxShadow:t.cardShadow }}>
+                  <span style={{ fontSize:22 }}>{x.mb.avatar}</span>
+                  <div style={{ flex:1 }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:t.text }}>{x.mb.name}</span>
+                    {x.isToday && <span style={{ fontSize:9, color:'#E040A0', fontWeight:700, marginLeft:7 }}>¡HOY!</span>}
+                  </div>
+                  <span style={{ fontSize:10, color:t.textMuted, fontFamily:"'Space Mono',monospace" }}>{String(x.day).padStart(2,'0')} {MONTHS[m]}</span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* Feriados */}
+      <SectionHeader label="FERIADOS" mt={18} />
+      {upFer.map(function(f) {
+        return (
+          <div key={f.date} className="p-card" onClick={function(){onSelectDate(f.date);}}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 13px', marginBottom:5, borderRadius:10, background:t.dangerBg, border:'1px solid '+t.dangerBorder, cursor:'pointer', boxShadow:t.cardShadow }}>
+            <div style={{ width:6, height:6, borderRadius:'50%', background:t.dangerText, flexShrink:0 }}></div>
+            <span style={{ fontSize:10, fontFamily:"'Space Mono',monospace", color:t.dangerText, minWidth:84 }}>{fmtDate(f.date)}</span>
+            <span style={{ fontSize:12, fontWeight:600, flex:1, color:t.text }}>{f.name}</span>
+            {f.type==='irrenunciable' && <span className="p-tag" style={{ background:t.dangerBg, color:t.danger, border:'1px solid '+t.dangerBorder }}>IRR.</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── EVENTS VIEW ────────────────────────────────────────────
+function EventsView(props) {
+  var events=props.events; var members=props.members; var onVote=props.onVote;
+  var onConfirm=props.onConfirm; var onMarkAbsent=props.onMarkAbsent; var onMarkBomba=props.onMarkBomba; var onMarkAsistio=props.onMarkAsistio;
+  var onExclude=props.onExclude; var onInclude=props.onInclude;
+  var onDelete=props.onDelete; var onTogglePlusOne=props.onTogglePlusOne;
+  var onEdit=props.onEdit; var selEv=props.selEv; var setSelEv=props.setSelEv; var onGastos=props.onGastos; var gastos=props.gastos||[];
+  var onCancel=props.onCancel; var onReopen=props.onReopen;
+  var t = useT();
+
+  var sorted    = events.slice().sort(function(a,b){return a.date<b.date?-1:1;});
+  var voting    = sorted.filter(function(e){return e.status==='voting';});
+  var today = new Date().toISOString().slice(0,10);
+  var confirmed    = sorted.filter(function(e){return e.status==='confirmed' && e.date>=today;});
+  var finishedEvts = sorted.filter(function(e){return e.status==='confirmed' && e.date<today;}).reverse();
+  var cancelled    = sorted.filter(function(e){return e.status==='cancelled';});
+
+  function renderItem(ev) {
+    if (selEv === ev.id) {
+      return <EventDetail key={ev.id} ev={ev} members={members} gastos={gastos} onVote={onVote} onConfirm={onConfirm} onMarkAbsent={onMarkAbsent} onMarkBomba={onMarkBomba} onMarkAsistio={onMarkAsistio} onExclude={onExclude} onInclude={onInclude} onDelete={onDelete} onTogglePlusOne={onTogglePlusOne} onEdit={onEdit} onGastos={onGastos} onCancel={onCancel} onReopen={onReopen} onBack={function(){setSelEv(null);}} inline={true} />;
+    }
+    return <EventCard key={ev.id} ev={ev} members={members} onClick={function(){setSelEv(ev.id);}} />;
+  }
+
+  return (
+    <div style={{ paddingTop:14 }}>
+      {events.length===0
+        ? <EmptyBox icon="🎯" title="Sin panoramas aún" text="Crea el primero con el botón +" />
+        : (
+          <div>
+            {voting.length>0 && (
+              <div>
+                <SectionHeader label={'🗳️  EN VOTACIÓN  · '+voting.length} mt={0} />
+                {voting.map(renderItem)}
+              </div>
+            )}
+            {confirmed.length>0 && (
+              <div style={{ marginTop:voting.length>0?22:0 }}>
+                <SectionHeader label={'✅  CONFIRMADOS  · '+confirmed.length} mt={0} />
+                {confirmed.map(renderItem)}
+              </div>
+            )}
+            {finishedEvts.length>0 && (
+              <div style={{ marginTop:(voting.length>0||confirmed.length>0)?22:0 }}>
+                <SectionHeader label={'🏁  REALIZADOS  · '+finishedEvts.length} mt={0} />
+                {finishedEvts.map(renderItem)}
+              </div>
+            )}
+            {cancelled.length>0 && (
+              <div style={{ marginTop:(voting.length>0||confirmed.length>0||finishedEvts.length>0)?22:0 }}>
+                <SectionHeader label={'❌  CANCELADOS  · '+cancelled.length} mt={0} />
+                {cancelled.map(renderItem)}
+              </div>
+            )}
+          </div>
+        )
+      }
+    </div>
+  );
+}
+
+function EventCard(props) {
+  var ev=props.ev; var members=props.members; var onClick=props.onClick;
+  var t   = useT();
+  var cat = getCat(ev);
+  var yes   = Object.values(ev.votes).filter(function(v){return v==='yes';}).length;
+  var no    = Object.values(ev.votes).filter(function(v){return v==='no';}).length;
+  var maybe = Object.values(ev.votes).filter(function(v){return v==='maybe';}).length;
+  var total = members.length;
+  var pct   = total>0 ? Math.round((yes/total)*100) : 0;
+  var plusOnes = members.filter(function(m){return ev.plusOne&&ev.plusOne[m.id];});
+  var isV   = ev.status==='voting';
+  var isCancelled = ev.status==='cancelled';
+  var catCol = isCancelled ? t.danger : (cat ? cat.color : '#888');
+
+  return (
+    <div className="p-card" onClick={onClick}
+      style={{ padding:'14px', marginBottom:8, borderRadius:14, background:isCancelled?t.dangerBg:t.surface, border:'1px solid '+(isCancelled?t.dangerBorder:t.border), cursor:'pointer', boxShadow:t.cardShadow, borderLeft:'3px solid '+catCol, opacity:isCancelled?0.75:1 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ width:42, height:42, borderRadius:10, background:catCol+'20', border:'1px solid '+catCol+'40', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{cat?cat.emoji:'📌'}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:700, fontSize:14, color:t.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.title}</div>
+          <div style={{ fontSize:11, color:t.textMuted, fontFamily:"'Space Mono',monospace" }}>{fmtDate(ev.date)}</div>
+        </div>
+        <span className="p-tag" style={{ background:isCancelled?t.dangerBg:isV?t.warningBg:t.successBg, color:isCancelled?t.dangerText:isV?t.warningText:t.successText, border:'1px solid '+(isCancelled?t.dangerBorder:isV?t.warningBorder:t.successBorder) }}>
+          {isCancelled?'CANCELADO':isV?'VOTANDO':'OK'}
+        </span>
+      </div>
+      <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:8 }}>
+          <VotePill emoji="👍" count={yes}   color={t.successText} />
+          <VotePill emoji="🤔" count={maybe} color={t.warningText} />
+          <VotePill emoji="👎" count={no}    color={t.dangerText}  />
+        </div>
+        {plusOnes.length>0 && <span style={{ fontSize:10, color:t.textMuted }}>👫 {plusOnes.map(function(m){return m.name+'+1';}).join(', ')}</span>}
+        {total>0 && (
+          <div style={{ flex:1, display:'flex', alignItems:'center', gap:7, minWidth:60 }}>
+            <div style={{ flex:1, height:4, borderRadius:2, background:t.border, overflow:'hidden' }}>
+              <div style={{ height:'100%', borderRadius:2, background:t.primary, width:pct+'%' }}></div>
+            </div>
+            <span style={{ fontSize:10, color:t.textMuted, fontFamily:"'Space Mono',monospace" }}>{yes}/{total}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VotePill(props) {
+  var t = useT();
+  if (!props.count) return null;
+  return <span style={{ fontSize:11, color:props.color, fontWeight:700, display:'flex', alignItems:'center', gap:2 }}><span style={{ fontSize:13 }}>{props.emoji}</span>{props.count}</span>;
+}
+
+// ── WMO WEATHER CODE → emoji ───────────────────────────────
+function wmoEmoji(code) {
+  if (code===0) return '☀️';
+  if (code<=2)  return '🌤️';
+  if (code<=3)  return '☁️';
+  if (code<=48) return '🌫️';
+  if (code<=57) return '🌦️';
+  if (code<=67) return '🌧️';
+  if (code<=77) return '🌨️';
+  if (code<=82) return '🌧️';
+  if (code<=95) return '⛈️';
+  return '⛈️';
+}
+
+// ── WEATHER + MAP WIDGET ───────────────────────────────────
+function WeatherMapWidget(props) {
+  var ev = props.ev;
+  var t  = useT();
+  var geoState  = useState(null);  var geo=geoState[0];   var setGeo=geoState[1];
+  var wxState   = useState(null);  var wx=wxState[0];     var setWx=wxState[1];
+  var errState  = useState('');    var geoErr=errState[0];  var setGeoErr=errState[1];
+  var loadState = useState(false); var wxLoad=loadState[0]; var setWxLoad=loadState[1];
+
+  useEffect(function() {
+    if (!ev.location) return;
+    setWxLoad(true); setGeoErr(''); setGeo(null); setWx(null);
+    fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(ev.location)+'&format=json&limit=1', { headers:{ 'Accept-Language':'es' } })
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        if (!data||!data[0]) { setGeoErr('Dirección no encontrada'); setWxLoad(false); return; }
+        var lat = parseFloat(data[0].lat); var lon = parseFloat(data[0].lon);
+        setGeo({ lat:lat, lon:lon });
+        var today = new Date(); today.setHours(0,0,0,0);
+        var evDate = new Date(ev.date+'T12:00:00');
+        var diff = Math.round((evDate-today)/(1000*60*60*24));
+        if (diff < -1 || diff > 15) { setWxLoad(false); return; }
+        return fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&timezone=auto&start_date='+ev.date+'&end_date='+ev.date);
+      })
+      .then(function(r){ if(r) return r.json(); })
+      .then(function(data){
+        if (data && data.daily) {
+          setWx({ code:data.daily.weathercode[0], tmax:Math.round(data.daily.temperature_2m_max[0]), tmin:Math.round(data.daily.temperature_2m_min[0]), rain:data.daily.precipitation_probability_max[0] });
+        }
+        setWxLoad(false);
+      })
+      .catch(function(){ setWxLoad(false); });
+  }, [ev.location, ev.date]);
+
+  if (!ev.location) return null;
+
+  var mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ev.location);
+
+  if (geoErr) return (
+    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 13px', marginBottom:8, borderRadius:10, background:t.warningBg, border:'1px solid '+t.warningBorder }}>
+      <span style={{ fontSize:11, color:t.warningText, flex:1 }}>📍 {geoErr}</span>
+      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, fontWeight:700, color:t.primary, textDecoration:'none' }}>🗺️ Maps</a>
+    </div>
+  );
+
+  return (
+    <div style={{ marginBottom:8 }}>
+      {wxLoad && !geo && (
+        <div style={{ fontSize:11, color:t.textMuted, padding:'6px 2px' }}>Cargando clima...</div>
+      )}
+      {geo && (
+        <div style={{ padding:'11px 14px', borderRadius:12, background:t.surface, border:'1px solid '+t.border, marginBottom:6, boxShadow:t.cardShadow }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            {wx && (
+              <div style={{ display:'flex', alignItems:'center', gap:6, flex:1 }}>
+                <span style={{ fontSize:26 }}>{wmoEmoji(wx.code)}</span>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:t.text }}>{wx.tmax}° / {wx.tmin}°</div>
+                  <div style={{ fontSize:10, color:t.textMuted }}>💧 {wx.rain}% lluvia</div>
+                </div>
+              </div>
+            )}
+            {wxLoad && <div style={{ flex:1, fontSize:11, color:t.textMuted }}>Cargando clima...</div>}
+            {!wx && !wxLoad && <div style={{ flex:1 }}></div>}
+            <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+              style={{ padding:'6px 14px', borderRadius:9, border:'1px solid '+t.primaryBorder, background:t.primaryBg, color:t.primary, fontSize:11, fontWeight:700, textDecoration:'none', display:'flex', alignItems:'center', gap:5, boxShadow:t.btnShadow, whiteSpace:'nowrap' }}>
+              🗺️ Maps
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── EVENT DETAIL ───────────────────────────────────────────
+function EventDetail(props) {
+  var ev=props.ev; var members=props.members; var onVote=props.onVote;
+  var onConfirm=props.onConfirm; var onMarkAbsent=props.onMarkAbsent; var onMarkBomba=props.onMarkBomba; var onMarkAsistio=props.onMarkAsistio;
+  var onExclude=props.onExclude; var onInclude=props.onInclude;
+  var onDelete=props.onDelete; var onTogglePlusOne=props.onTogglePlusOne;
+  var onEdit=props.onEdit; var onBack=props.onBack; var onGastos=props.onGastos; var gastosArr=props.gastos||[]; var onCancel=props.onCancel; var onReopen=props.onReopen; var inline=props.inline||false;
+  var gastosCount = gastosArr.filter(function(g){ return g.eventId===ev.id; }).length;
+  var showCalState = useState(false); var showCal = showCalState[0]; var setShowCal = showCalState[1];
+  var cwState = useState(''); var confirmWarn = cwState[0]; var setConfirmWarn = cwState[1];
+  var t   = useT();
+  var cat = getCat(ev);
+  var excl = ev.excluded || [];
+  var activeMembers = members.filter(function(m){ return excl.indexOf(m.id) < 0; });
+  var exclMembers   = members.filter(function(m){ return excl.indexOf(m.id) >= 0; });
+  var yes   = activeMembers.filter(function(m){ return ev.votes[m.id]==='yes'; }).length;
+  var no    = activeMembers.filter(function(m){ return ev.votes[m.id]==='no'; }).length;
+  var maybe = activeMembers.filter(function(m){ return ev.votes[m.id]==='maybe'; }).length;
+  var plusOne = ev.plusOne||{};
+  var isV = ev.status==='voting';
+  var isCancelled = ev.status==='cancelled';
+  var isPast = ev.date < new Date().toISOString().slice(0,10);
+  var catCol = isCancelled ? t.danger : (cat?cat.color:'#888');
+  var hasPO = activeMembers.some(function(m){return plusOne[m.id];});
+
+  return (
+    <div className={inline?'ev-expand':''} style={{ paddingTop: inline ? 0 : 14, marginBottom: inline ? 8 : 0 }}>
+      {/* Top bar */}
+      <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+        {!inline && <ActionBtn onClick={onBack} style={{ paddingLeft:12, paddingRight:12, fontSize:12, borderRadius:10 }}>← Volver</ActionBtn>}
+        <div style={{ flex:1 }}></div>
+        {inline && <ActionBtn onClick={onBack} style={{ paddingLeft:10, paddingRight:10, fontSize:13, borderRadius:10 }}>▲</ActionBtn>}
+        <ActionBtn onClick={onEdit} color={t.primary} bg={t.primaryBg} bd={t.primaryBorder} style={{ paddingLeft:12, paddingRight:12, fontSize:12, borderRadius:10 }}>✏️ Editar</ActionBtn>
+        {onGastos && (
+          <ActionBtn onClick={function(){onGastos(ev.id);}} style={{ paddingLeft:11, paddingRight:11, fontSize:12, borderRadius:10 }}>
+            {'💰'+(gastosCount>0?' '+gastosCount:'')}
+          </ActionBtn>
+        )}
+        {/* Calendar export */}
+        <div style={{ position:'relative' }}>
+          <ActionBtn onClick={function(){setShowCal(!showCal);}} style={{ paddingLeft:11, paddingRight:11, fontSize:12, borderRadius:10 }}>📱 Calendario</ActionBtn>
+          {showCal && (
+            <div style={{ position:'absolute', top:42, right:0, background:t.surfaceElevated, border:'1px solid '+t.border, borderRadius:12, padding:'6px', zIndex:200, minWidth:180, boxShadow:t.cardShadow }}>
+              <a href={googleCalUrl(ev)} target="_blank" rel="noopener noreferrer" onClick={function(){setShowCal(false);}}
+                style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderRadius:8, fontSize:12, fontWeight:600, color:t.text, textDecoration:'none', background:'transparent' }}
+                onMouseEnter={function(e){e.currentTarget.style.background=t.surfaceHover;}}
+                onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                <span style={{ fontSize:18 }}>📅</span> Google Calendar
+              </a>
+              <button onClick={function(){downloadICS(ev);setShowCal(false);}}
+                style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderRadius:8, fontSize:12, fontWeight:600, color:t.text, background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit', width:'100%' }}
+                onMouseEnter={function(e){e.currentTarget.style.background=t.surfaceHover;}}
+                onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                <span style={{ fontSize:18 }}>🍎</span> Apple / iPhone Cal
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Header card */}
+      <div style={{ padding:'16px', borderRadius:14, marginBottom:8, background:t.surface, border:'1px solid '+catCol+'35', borderLeft:'4px solid '+catCol, boxShadow:t.cardShadow }}>
+        <div style={{ display:'flex', alignItems:'center', gap:13 }}>
+          <div style={{ width:52, height:52, borderRadius:12, background:catCol+'20', border:'1px solid '+catCol+'40', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28 }}>{cat?cat.emoji:'📌'}</div>
+          <div style={{ flex:1 }}>
+            <h2 style={{ margin:0, fontSize:19, fontWeight:800, color:t.text }}>{ev.title}</h2>
+            <div style={{ fontSize:11, color:t.textMuted, fontFamily:"'Space Mono',monospace", marginTop:2 }}>{fmtDate(ev.date)}</div>
+            <span className="p-tag" style={{ marginTop:6, background:isV?t.warningBg:t.successBg, color:isV?t.warningText:t.successText, border:'1px solid '+(isV?t.warningBorder:t.successBorder) }}>
+              {isV?'EN VOTACIÓN':'CONFIRMADO'}
+            </span>
+          </div>
+        </div>
+        {ev.description && <p style={{ margin:'12px 0 0', fontSize:13, color:t.textSub, lineHeight:1.6, borderTop:'1px solid '+t.divider, paddingTop:10 }}>{ev.description}</p>}
+        {ev.time && <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:8, fontSize:12, color:t.textMuted }}>🕐 {ev.time}</div>}
+        {ev.location && <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4, fontSize:12, color:t.textMuted }}>📍 {ev.location}</div>}
+      </div>
+      {ev.location && <WeatherMapWidget ev={ev} />}
+
+      {/* Gastos inline preview */}
+      {gastosCount > 0 && (function() {
+        var linked = gastosArr.filter(function(g){ return g.eventId===ev.id; });
+        var totalLinked = linked.reduce(function(s,g){ return s+g.amount; }, 0);
+        return (
+          <div style={{ marginBottom:8, padding:'12px 13px', borderRadius:14, background:t.surface, border:'1px solid '+t.border, boxShadow:t.cardShadow }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:t.primary, letterSpacing:'0.06em' }}>💰  GASTOS VINCULADOS</div>
+              <span style={{ fontFamily:"'Space Mono',monospace", fontSize:11, fontWeight:800, color:t.text }}>{fmtCLP(totalLinked)}</span>
+            </div>
+            {linked.map(function(g) {
+              var payer = members.find(function(m){ return m.id===g.paidBy; });
+              var exclGI = g.excludedMembers || [];
+              var activeMI = members.filter(function(m){ return exclGI.indexOf(m.id) < 0; });
+              var nonPayers = activeMI.filter(function(m){ return m.id!==g.paidBy; });
+              var isFullyPaid = (g.splitMode||'equal')==='equal'
+                ? nonPayers.length>0 && nonPayers.every(function(m){ return (g.paid||{})[m.id]===true; })
+                : activeMI.length>0 && activeMI.every(function(m){ return (g.paid||{})[m.id]===true; });
+              return (
+                <div key={g.id} style={{ display:'flex', alignItems:'center', gap:8, paddingTop:7, paddingBottom:7, borderTop:'1px solid '+t.divider }}>
+                  <div style={{ width:28, height:28, borderRadius:7, background:isFullyPaid?t.successBg:t.inputBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>{payer?payer.avatar:'💰'}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:t.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{g.description}</div>
+                    <div style={{ fontSize:10, color:t.textMuted }}>{payer?payer.name:'?'} pagó{isFullyPaid?' · ✅ saldado':''}</div>
+                  </div>
+                  <span style={{ fontFamily:"'Space Mono',monospace", fontSize:12, fontWeight:700, color:isFullyPaid?t.successText:t.text, flexShrink:0 }}>{fmtCLP(g.amount)}</span>
+                </div>
+              );
+            })}
+            {onGastos && (
+              <button className="p-btn" onClick={function(){onGastos(ev.id);}}
+                style={{ width:'100%', marginTop:10, padding:'9px', borderRadius:9, border:'1px solid '+t.primaryBorder, background:t.primaryBg, color:t.primary, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>
+                Ver detalle en Gastos →
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Tally */}
+      <div style={{ display:'flex', gap:6, marginBottom:8 }}>
+        {[
+          {count:yes,   label:'SÍ VAN',  bg:t.successBg, col:t.successText, bd:t.successBorder},
+          {count:maybe, label:'QUIZÁS',  bg:t.warningBg, col:t.warningText, bd:t.warningBorder},
+          {count:no,    label:'NO VAN',  bg:t.dangerBg,  col:t.dangerText,  bd:t.dangerBorder}
+        ].map(function(x) {
+          return (
+            <div key={x.label} style={{ flex:1, textAlign:'center', padding:'12px 4px', borderRadius:12, background:x.bg, border:'1px solid '+x.bd, boxShadow:t.btnShadow }}>
+              <div style={{ fontSize:24, fontWeight:900, color:x.col, fontFamily:"'Space Mono',monospace", lineHeight:1 }}>{x.count}</div>
+              <div style={{ fontSize:8, color:x.col, marginTop:4, opacity:0.7, letterSpacing:'0.06em' }}>{x.label}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Members */}
+      <div style={{ padding:'14px', borderRadius:14, marginBottom:8, background:t.surface, border:'1px solid '+t.border, boxShadow:t.cardShadow }}>
+        <div style={{ fontSize:11, fontWeight:700, color:isCancelled?t.dangerText:t.primary, marginBottom:12, letterSpacing:'0.06em' }}>
+          {isCancelled ? '❌  CANCELADO' : isV ? ('🗳️  VOTACIÓN · '+activeMembers.length+' participantes') : (isPast?'✅  ASISTENCIA':'✅  ASISTIRÁN')}
+        </div>
+        {activeMembers.length===0
+          ? <p style={{ fontSize:12, color:t.textMuted, textAlign:'center', padding:'12px 0' }}>Sin participantes · usa el botón ×/+ para gestionar</p>
+          : activeMembers.map(function(m) {
+              var vote   = ev.votes[m.id];
+              var absent = ev.absent&&ev.absent.indexOf(m.id)>=0;
+              var hasPL  = plusOne[m.id];
+              return (
+                <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 0', borderBottom:'1px solid '+t.divider }}>
+                  <div style={{ width:34, height:34, borderRadius:9, background:t.inputBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:19, flexShrink:0 }}>{m.avatar}</div>
+                  <div style={{ flex:1 }}>
+                    <span style={{ fontSize:13, fontWeight:600, color:t.text }}>{m.name}</span>
+                    {hasPL && <span style={{ fontSize:10, color:t.primary, fontWeight:700 }}> +1</span>}
+                  </div>
+                  {/* +1 toggle */}
+                  {isV && !isCancelled && (
+                    <button className="p-btn" onClick={function(){onTogglePlusOne(ev.id,m.id);}}
+                      style={{ fontSize:9, fontWeight:700, border:'1px solid '+(hasPL?t.primaryBorder:t.border), background:hasPL?t.primaryBg:t.inputBg, color:hasPL?t.primary:t.textMuted, borderRadius:7, padding:'4px 8px', cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>+1</button>
+                  )}
+                  {isV && !isCancelled
+                    ? (
+                      <div style={{ display:'flex', gap:3 }}>
+                        {[
+                          {k:'yes',  e:'👍',bg:t.successBg,col:t.successText,bd:t.successBorder,glow:'#22c55e'},
+                          {k:'maybe',e:'🤔',bg:t.warningBg,col:t.warningText,bd:t.warningBorder,glow:'#f59e0b'},
+                          {k:'no',   e:'👎',bg:t.dangerBg, col:t.dangerText, bd:t.dangerBorder, glow:'#ef4444'}
+                        ].map(function(x) {
+                          var act = vote===x.k;
+                          return <button key={x.k} className="p-btn" onClick={function(){onVote(ev.id,m.id,x.k);}} style={{ width:act?40:34,height:act?36:30,borderRadius:9,border:(act?'2px':'1px')+' solid '+(act?x.bd:t.border),background:act?x.bg:t.inputBg,cursor:'pointer',fontSize:act?19:14,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:act?('0 0 0 3px '+x.glow+'44, '+t.btnShadow):'none',transform:act?'scale(1.08)':'scale(1)',transition:'all 0.15s ease',zIndex:act?1:0,position:'relative' }}>{x.e}</button>;
+                        })}
+                        {/* remove from event */}
+                        <button className="p-btn" onClick={function(){onExclude(ev.id,m.id);}}
+                          style={{ width:28,height:30,borderRadius:8,border:'1px solid '+t.border,background:t.inputBg,cursor:'pointer',fontSize:13,color:t.textMuted,display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
+                      </div>
+                    )
+                    : (!isV && !isCancelled)
+                    ? (function(){
+                        var inBomba = (ev.bomba||[]).indexOf(m.id)>=0;
+                        var asistioActive = !absent && !inBomba;
+                        var lblAsistio = isPast ? 'Asistió ✓' : 'Asistirá ✓';
+                        var lblFalto   = isPast ? 'Faltó 💀' : 'No irá 💀';
+                        if (!vote) {
+                          return (
+                            <div style={{ display:'flex', gap:3, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                              <button className="p-btn" onClick={function(){ if(!asistioActive){onMarkAsistio(ev.id,m.id);} }}
+                                style={{ padding:'4px 8px', borderRadius:7, border:'1px solid '+(asistioActive?t.successBorder:t.border), background:asistioActive?t.successBg:t.inputBg, color:asistioActive?t.successText:t.textSub, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>{lblAsistio}</button>
+                              <button className="p-btn" onClick={function(){ onMarkBomba(ev.id,m.id); }}
+                                style={{ padding:'4px 8px', borderRadius:7, border:'1px solid '+(inBomba?'#8b5cf6':t.border), background:inBomba?'#ede9fe':t.inputBg, color:inBomba?'#7c3aed':t.textSub, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Bomba 💨</button>
+                              <button className="p-btn" onClick={function(){ onMarkAbsent(ev.id,m.id); }}
+                                style={{ padding:'4px 8px', borderRadius:7, border:'1px solid '+(absent?t.dangerBorder:t.border), background:absent?t.dangerBg:t.inputBg, color:absent?t.dangerText:t.textSub, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>{lblFalto}</button>
+                            </div>
+                          );
+                        }
+                        var isMaybeFuture = vote==='maybe' && !isPast;
+                        var statusLabel = absent
+                          ? (isPast?'Faltó 💀':'No irá 💀')
+                          : isMaybeFuture
+                          ? 'Quizás 🤔'
+                          : (isPast?'Asistió ✓':'Asistirá ✓');
+                        var statusBd = absent ? t.dangerBorder : isMaybeFuture ? t.warningBorder : t.successBorder;
+                        var statusBg = absent ? t.dangerBg    : isMaybeFuture ? t.warningBg    : t.successBg;
+                        var statusCo = absent ? t.dangerText  : isMaybeFuture ? t.warningText  : t.successText;
+                        return (
+                          <button className="p-btn" onClick={function(){onMarkAbsent(ev.id,m.id);}}
+                            style={{ border:'1px solid '+statusBd, background:statusBg, color:statusCo, borderRadius:8, padding:'5px 10px', cursor:'pointer', fontSize:10, fontWeight:700, fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                            {statusLabel}
+                          </button>
+                        );
+                      })()
+                    : (function(){
+                        var inBomba2 = (ev.bomba||[]).indexOf(m.id)>=0;
+                        if (!vote && inBomba2) return <span style={{ fontSize:10, fontWeight:700, color:'#7c3aed', background:'#ede9fe', border:'1px solid #8b5cf6', borderRadius:5, padding:'2px 6px' }}>Bomba 💨</span>;
+                        return <span style={{ fontSize:11, color:t.textMuted }}>{vote==='yes'?'👍':vote==='maybe'?'🤔':vote==='no'?'👎':'—'}</span>;
+                      })()
+                  }
+                </div>
+              );
+            })
+        }
+        {/* Excluded members */}
+        {exclMembers.length>0 && (
+          <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid '+t.divider }}>
+            <div style={{ fontSize:10, color:t.textMuted, marginBottom:5, letterSpacing:'0.04em' }}>NO PARTICIPAN</div>
+            {exclMembers.map(function(m){
+              return (
+                <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
+                  <div style={{ width:28, height:28, borderRadius:7, background:t.inputBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, opacity:0.5, flexShrink:0 }}>{m.avatar}</div>
+                  <span style={{ flex:1, fontSize:12, color:t.textMuted, fontStyle:'italic' }}>{m.name}</span>
+                  <button className="p-btn" onClick={function(){onInclude(ev.id,m.id);}}
+                    style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:7, border:'1px solid '+t.primaryBorder, background:t.primaryBg, color:t.primary, cursor:'pointer', fontFamily:'inherit' }}>+ Añadir</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {hasPO && (
+          <div style={{ marginTop:10, padding:'8px 11px', borderRadius:9, background:t.primaryBg, border:'1px solid '+t.primaryBorder }}>
+            <span style={{ fontSize:11, color:t.textSub }}>👫 Con pareja: {activeMembers.filter(function(m){return plusOne[m.id];}).map(function(m){return m.name+'+1';}).join(', ')}</span>
+          </div>
+        )}
+        {isV && !isCancelled && (
+          <div>
+            {confirmWarn==='noQuorum' && (
+              <div style={{ marginTop:10, padding:'10px 13px', borderRadius:10, background:t.dangerBg, border:'1px solid '+t.dangerBorder, fontSize:12, color:t.dangerText, fontWeight:600, lineHeight:1.5 }}>
+                🚫 Se necesitan mínimo 2 personas que quieran ir. Sólo {yes} quiere{yes===1?' ir':' van'}.
+              </div>
+            )}
+            <button className="p-btn" onClick={function(){
+              if (yes < 2) { setConfirmWarn('noQuorum'); return; }
+              setConfirmWarn('');
+              onConfirm(ev.id);
+            }}
+              style={{ width:'100%', marginTop:14, padding:'13px', borderRadius:11, border:'none', background:yes>=2?t.primary:t.inputBg, color:yes>=2?(t.isDark?'#000':'#fff'):t.textMuted, fontWeight:800, fontSize:14, cursor:'pointer', fontFamily:'inherit', boxShadow:yes>=2?t.primaryShadow:'none' }}>
+              Confirmar panorama ✓
+            </button>
+            <button className="p-btn" onClick={function(){onCancel(ev.id);}}
+              style={{ width:'100%', marginTop:8, padding:'10px', borderRadius:11, border:'1px solid '+t.dangerBorder, background:'transparent', color:t.dangerText, fontWeight:600, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>
+              Sin confirmación ❌
+            </button>
+          </div>
+        )}
+        {isCancelled && (
+          <button className="p-btn" onClick={function(){onReopen(ev.id);}}
+            style={{ width:'100%', marginTop:14, padding:'12px', borderRadius:11, border:'1px solid '+t.primaryBorder, background:t.primaryBg, color:t.primary, fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>
+            ↩ Reabrir votación
+          </button>
+        )}
+      </div>
+
+      <button className="p-btn" onClick={function(){onDelete(ev.id);}}
+        style={{ width:'100%', padding:'11px', borderRadius:11, border:'1px solid '+t.dangerBorder, background:t.dangerBg, color:t.dangerText, fontWeight:600, fontSize:12, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>
+        Eliminar panorama
+      </button>
+    </div>
+  );
+}
+
+// ── RANKING VIEW ───────────────────────────────────────────
+function RankingView(props) {
+  var members=props.members; var absences=props.absences; var bombas=props.bombas||{}; var events=props.events;
+  var t = useT();
+  var conf = events.filter(function(e){return e.status==='confirmed';});
+
+  // Top 5 corretiaos
+  var srtAbs = members.slice().sort(function(a,b){return (absences[b.id]||0)-(absences[a.id]||0);}).slice(0,5);
+  var maxA = Math.max.apply(null, members.map(function(m){return absences[m.id]||0;}).concat([1]));
+
+  // Top 5 bombas de humo
+  var srtBmb = members.slice().sort(function(a,b){return (bombas[b.id]||0)-(bombas[a.id]||0);}).slice(0,5);
+  var maxB = Math.max.apply(null, members.map(function(m){return bombas[m.id]||0;}).concat([1]));
+
+  function RankRow(rowProps) {
+    var m=rowProps.m; var i=rowProps.i; var cnt=rowProps.cnt; var maxV=rowProps.maxV;
+    var label=rowProps.label; var icon=rowProps.icon; var accentCol=rowProps.accentCol; var accentBg=rowProps.accentBg; var accentBd=rowProps.accentBd; var kingLabel=rowProps.kingLabel;
+    var pct  = Math.round((cnt/maxV)*100);
+    var wrst = i===0&&cnt>0;
+    var nc   = cnt>2?accentCol:cnt>0?t.warningText:t.success;
+    return (
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', marginBottom:7, borderRadius:13, background:wrst?accentBg:t.surface, border:'1px solid '+(wrst?accentBd:t.border), boxShadow:t.cardShadow }}>
+        <span style={{ fontFamily:"'Space Mono',monospace", fontSize:13, fontWeight:700, color:i===0?accentCol:i===1?t.warningText:t.textMuted, minWidth:24 }}>#{i+1}</span>
+        <div style={{ width:38, height:38, borderRadius:9, background:t.inputBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:21 }}>{m.avatar}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:700, fontSize:13, color:t.text, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+            {m.name}
+            {wrst && <span style={{ fontSize:9, color:accentCol, fontWeight:700, background:accentBg, border:'1px solid '+accentBd, borderRadius:4, padding:'1px 6px' }}>{kingLabel}</span>}
+          </div>
+          <div style={{ marginTop:6, height:5, borderRadius:3, background:t.divider, overflow:'hidden' }}>
+            <div style={{ height:'100%', borderRadius:3, width:pct+'%', background:nc }}></div>
+          </div>
+          {cnt>0 && <div style={{ fontSize:11, marginTop:3 }}>{icon.repeat(Math.min(cnt,8))}</div>}
+        </div>
+        <div style={{ textAlign:'right', minWidth:36 }}>
+          <div style={{ fontSize:26, fontWeight:900, fontFamily:"'Space Mono',monospace", lineHeight:1, color:nc }}>{cnt}</div>
+          <div style={{ fontSize:8, color:t.textMuted, marginTop:1, letterSpacing:'0.06em' }}>{label}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ paddingTop:14 }}>
+      {/* Header */}
+      <div style={{ padding:'14px 16px', borderRadius:14, marginBottom:14, background:t.dangerBg, border:'1px solid '+t.dangerBorder, borderLeft:'4px solid '+t.danger, boxShadow:t.cardShadow }}>
+        <div style={{ fontSize:16, fontWeight:800, color:t.dangerText }}>💀 Muro de los Corretiaos</div>
+        <div style={{ fontSize:11, color:t.textMuted, marginTop:2 }}>Top 5 · faltas y bombas de humo</div>
+      </div>
+
+      {conf.length===0
+        ? <EmptyBox text="Confirma panoramas para ver el ranking" />
+        : members.length===0
+        ? <EmptyBox text="Agrega participantes primero" />
+        : (
+          <div>
+            {/* Top 5 Faltas */}
+            <SectionHeader label="💀  TOP CORRETIAOS" mt={0} />
+            {srtAbs.map(function(m,i){
+              return <RankRow key={m.id} m={m} i={i} cnt={absences[m.id]||0} maxV={maxA} label="FALTAS" icon="💀" accentCol={t.dangerText} accentBg={t.dangerBg} accentBd={t.dangerBorder} kingLabel="👑 REY CORRETIAO" />;
+            })}
+
+            {/* Top 5 Bombas */}
+            <SectionHeader label="💨  TOP BOMBAS DE HUMO" mt={22} />
+            {srtBmb.map(function(m,i){
+              return <RankRow key={m.id} m={m} i={i} cnt={bombas[m.id]||0} maxV={maxB} label="BOMBAS" icon="💨" accentCol="#7c3aed" accentBg="#ede9fe" accentBd="#8b5cf6" kingLabel="👑 REY BOMBA" />;
+            })}
+          </div>
+        )
+      }
+
+      {conf.length>0 && (
+        <div style={{ marginTop:16 }}>
+          <SectionHeader label="ESTADÍSTICAS" mt={0} />
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>
+            {[
+              {v:events.length,    l:'Panoramas',    c:t.primary,      bg:t.primaryBg,  b:t.primaryBorder},
+              {v:conf.length,      l:'Confirmados',  c:t.successText,  bg:t.successBg,  b:t.successBorder},
+              {v:Object.values(absences).reduce(function(a,b){return a+b;},0), l:'Faltas totales', c:t.dangerText, bg:t.dangerBg, b:t.dangerBorder},
+              {v:Object.values(bombas).reduce(function(a,b){return a+b;},0), l:'Bombas totales', c:'#7c3aed', bg:'#ede9fe', b:'#8b5cf6'}
+            ].map(function(s) {
+              return (
+                <div key={s.l} style={{ textAlign:'center', padding:'14px 10px', borderRadius:12, background:s.bg, border:'1px solid '+s.b, boxShadow:t.cardShadow }}>
+                  <div style={{ fontSize:28, fontWeight:900, color:s.c, fontFamily:"'Space Mono',monospace", lineHeight:1 }}>{s.v}</div>
+                  <div style={{ fontSize:9, color:t.textMuted, marginTop:5, letterSpacing:'0.07em' }}>{s.l.toUpperCase()}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MEMBERS VIEW ───────────────────────────────────────────
+function MembersView(props) {
+  var members=props.members; var absences=props.absences; var onAdd=props.onAdd; var onRemove=props.onRemove; var onEdit=props.onEdit;
+  var t = useT();
+  var cds = useState(null); var confirmDel=cds[0]; var setConfirmDel=cds[1];
+
+  return (
+    <div style={{ paddingTop:14 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+        <div>
+          <div style={{ fontSize:17, fontWeight:800, color:t.text }}>El Grupo</div>
+          <div style={{ fontSize:11, color:t.textMuted }}>{members.length} participante{members.length!==1?'s':''}</div>
+        </div>
+        <button className="p-btn" onClick={onAdd}
+          style={{ padding:'8px 16px', borderRadius:10, border:'1px solid '+t.primaryBorder, background:t.primaryBg, color:t.primary, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>
+          + Agregar
+        </button>
+      </div>
+
+      {members.length===0 ? <EmptyBox icon="👥" title="Sin participantes" text="Agrega a los cabros del grupo" />
+        : members.map(function(m) {
+            var abs = absences[m.id]||0;
+            return (
+              <div key={m.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 13px', marginBottom:7, borderRadius:13, background:t.surface, border:'1px solid '+t.border, boxShadow:t.cardShadow }}>
+                <div style={{ width:44, height:44, borderRadius:11, background:t.inputBg, border:'1px solid '+t.border, display:'flex', alignItems:'center', justifyContent:'center', fontSize:25 }}>{m.avatar}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700, fontSize:14, color:t.text }}>{m.name}</div>
+                  <div style={{ fontSize:11, color:abs>0?t.dangerText:t.successText, marginTop:1 }}>{abs>0?('💀 '+abs+' falta'+(abs!==1?'s':'')):'Sin faltas ✓'}</div>
+                </div>
+                {confirmDel===m.id
+                  ? (
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button className="p-btn" onClick={function(){onRemove(m.id);setConfirmDel(null);}} style={{ padding:'5px 12px', borderRadius:8, border:'1px solid '+t.dangerBorder, background:t.dangerBg, color:t.dangerText, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>Sí</button>
+                      <button className="p-btn" onClick={function(){setConfirmDel(null);}} style={{ padding:'5px 12px', borderRadius:8, border:'1px solid '+t.border, background:t.inputBg, color:t.text, fontSize:11, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>No</button>
+                    </div>
+                  )
+                  : (
+                    <div style={{ display:'flex', gap:4 }}>
+                      <button className="p-btn" onClick={function(){onEdit(m.id);}} style={{ background:'none', border:'none', color:t.textMuted, cursor:'pointer', fontSize:16, padding:4 }}>✏️</button>
+                      <button className="p-btn" onClick={function(){setConfirmDel(m.id);}} style={{ background:'none', border:'none', color:t.textMuted, cursor:'pointer', fontSize:18, padding:4 }}>✕</button>
+                    </div>
+                  )
+                }
+              </div>
+            );
+          })
+      }
+    </div>
+  );
+}
+
+// ── EVENT MODAL (create + edit) ────────────────────────────
+function EventModal(props) {
+  var mode=props.mode; var date=props.date; var initial=props.initial;
+  var onClose=props.onClose; var onSave=props.onSave; var members=props.members||[];
+  var t = useT();
+  var isEdit = mode==='edit';
+  var isConfirmed = isEdit && initial && initial.status==='confirmed';
+
+  var ts=useState(initial?initial.title:''); var title=ts[0]; var setTitle=ts[1];
+  var cs=useState(initial?initial.category:'carrete'); var category=cs[0]; var setCategory=cs[1];
+  var ces=useState(initial?initial.customEmoji||'':''); var customEmoji=ces[0]; var setCustomEmoji=ces[1];
+  var cls=useState(initial?initial.customLabel||'':''); var customLabel=cls[0]; var setCustomLabel=cls[1];
+  var ds=useState(initial?initial.date:(date||'')); var eventDate=ds[0]; var setEventDate=ds[1];
+  var tis=useState(initial?initial.time||'':''); var eventTime=tis[0]; var setEventTime=tis[1];
+  var xs=useState(initial?initial.description:''); var description=xs[0]; var setDescription=xs[1];
+  var ls=useState(initial?initial.location:''); var location=ls[0]; var setLocation=ls[1];
+  var abs0 = (initial&&initial.absent)?initial.absent:[];
+  var absSt=useState(abs0); var editAbsent=absSt[0]; var setEditAbsent=absSt[1];
+  var votes0 = (initial&&initial.votes)?Object.assign({},initial.votes):{};
+  var votesSt=useState(votes0); var editVotes=votesSt[0]; var setEditVotes=votesSt[1];
+  var valid = title.trim()!=='' && eventDate!=='';
+
+  function toggleAbs(mid) {
+    setEditAbsent(function(prev){
+      return prev.indexOf(mid)>=0 ? prev.filter(function(a){return a!==mid;}) : prev.concat([mid]);
+    });
+  }
+  function setVote(mid, v) {
+    setEditVotes(function(prev){
+      var next = Object.assign({}, prev);
+      if (next[mid] === v) { next[mid] = null; } else { next[mid] = v; }
+      return next;
+    });
+  }
+
+  function handleSave() {
+    if (!valid) return;
+    var payload = { title:title.trim(), category:category, date:eventDate, time:eventTime, description:description.trim(), location:location.trim() };
+    if (category === 'custom') { payload.customEmoji = customEmoji || '✨'; payload.customLabel = customLabel.trim() || 'Otro'; }
+    if (isConfirmed) payload.absent = editAbsent;
+    if (isEdit && !isConfirmed) payload.votes = editVotes;
+    onSave(payload);
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200 }} onClick={onClose}>
+      <div className="modal-sheet" style={{ width:'100%', maxWidth:520, maxHeight:'92vh', overflowY:'auto', padding:'24px 18px 34px', borderRadius:'22px 22px 0 0', background:t.modalBg, border:'1px solid '+t.border, borderBottom:'none', boxShadow:t.modalShadow }} onClick={function(e){e.stopPropagation();}}>
+
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
+          <div>
+            <div style={{ fontSize:19, fontWeight:800, color:t.text }}>{isEdit?'Editar panorama':'Nuevo panorama'}</div>
+            <div style={{ fontSize:11, color:t.textMuted, marginTop:2 }}>{isEdit?'Modifica los detalles':'¿Qué se viene?'}</div>
+          </div>
+          <ActionBtn onClick={onClose} width={32} height={32} style={{ borderRadius:9, fontSize:14 }}>✕</ActionBtn>
+        </div>
+
+        <FieldLabel>Nombre del panorama</FieldLabel>
+        <input className="p-input" value={title} onChange={function(e){setTitle(e.target.value);}} placeholder="Ej: Asado en casa del Juancho" style={inpSt(t)} />
+
+        <FieldLabel>Categoría</FieldLabel>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:category==='custom'?8:14 }}>
+          {CATS.map(function(c) {
+            var act = category===c.id;
+            return (
+              <button key={c.id} className="p-btn" onClick={function(){setCategory(c.id);}}
+                style={{ padding:'10px 4px', borderRadius:11, border:act?('2px solid '+c.color):('1px solid '+t.border), background:act?(c.color+'20'):t.inputBg, cursor:'pointer', color:act?t.text:t.textSub, fontSize:10, fontFamily:'inherit', fontWeight:act?700:400, textAlign:'center', boxShadow:act?t.btnShadow:'none' }}>
+                <span style={{ fontSize:20, display:'block', marginBottom:3 }}>{c.emoji}</span>
+                {c.label}
+              </button>
+            );
+          })}
+          {(function(){
+            var act = category==='custom';
+            return (
+              <button className="p-btn" onClick={function(){setCategory('custom');}}
+                style={{ padding:'10px 4px', borderRadius:11, border:act?'2px solid #888':('1px solid '+t.border), background:act?'#88888818':t.inputBg, cursor:'pointer', color:act?t.text:t.textSub, fontSize:10, fontFamily:'inherit', fontWeight:act?700:400, textAlign:'center', boxShadow:act?t.btnShadow:'none' }}>
+                <span style={{ fontSize:20, display:'block', marginBottom:3 }}>{customEmoji||'✨'}</span>
+                Otro
+              </button>
+            );
+          })()}
+        </div>
+        {category==='custom' && (
+          <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:14, padding:'12px', borderRadius:11, background:t.inputBg, border:'1px solid '+t.border }}>
+            <div style={{ flexShrink:0, textAlign:'center' }}>
+              <input
+                value={customEmoji}
+                onChange={function(e){
+                  var v = e.target.value;
+                  var chars = Array.from(v);
+                  setCustomEmoji(chars.slice(-1).join(''));
+                }}
+                placeholder="✨"
+                style={{ width:58, height:58, borderRadius:12, border:'2px solid '+t.border, background:t.surface, color:t.text, fontSize:30, textAlign:'center', outline:'none', cursor:'pointer', display:'block' }}
+              />
+              <div style={{ fontSize:8, color:t.textMuted, marginTop:4, lineHeight:1.3 }}>Toca para<br/>elegir emoji</div>
+            </div>
+            <input className="p-input" value={customLabel} onChange={function(e){setCustomLabel(e.target.value);}}
+              placeholder="Nombre del tipo (ej: Cumpleaños)" style={Object.assign({},inpSt(t),{marginBottom:0, flex:1})} />
+          </div>
+        )}
+
+        <FieldLabel>Fecha</FieldLabel>
+        <input className="p-input" type="date" value={eventDate} onChange={function(e){setEventDate(e.target.value);}} style={inpSt(t)} />
+
+        <FieldLabel>Hora <span style={{fontSize:9,opacity:0.6}}>(opcional)</span></FieldLabel>
+        <input className="p-input" type="time" value={eventTime} onChange={function(e){setEventTime(e.target.value);}} style={inpSt(t)} />
+
+        <FieldLabel>Lugar (opcional)</FieldLabel>
+        <input className="p-input" value={location} onChange={function(e){setLocation(e.target.value);}} placeholder="Ej: Casa del Toto, Cajón del Maipo" style={inpSt(t)} />
+
+        <FieldLabel>Descripción (opcional)</FieldLabel>
+        <textarea className="p-input" value={description} onChange={function(e){setDescription(e.target.value);}} placeholder="Detalles, qué llevar, etc..." rows={3} style={Object.assign({},inpSt(t),{resize:'vertical'})} />
+
+        {isEdit && !isConfirmed && members.length>0 && (
+          <div style={{ marginBottom:14 }}>
+            <FieldLabel>Votos actuales</FieldLabel>
+            <div style={{ borderRadius:11, border:'1px solid '+t.border, background:t.inputBg, overflow:'hidden' }}>
+              {members.map(function(m, i) {
+                var vote = editVotes[m.id];
+                return (
+                  <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderBottom:i<members.length-1?('1px solid '+t.divider):'none' }}>
+                    <div style={{ width:30, height:30, borderRadius:8, background:t.surface, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0 }}>{m.avatar}</div>
+                    <span style={{ flex:1, fontSize:13, fontWeight:600, color:t.text }}>{m.name}</span>
+                    <div style={{ display:'flex', gap:3 }}>
+                      {[
+                        {k:'yes',  e:'👍', bg:t.successBg, col:t.successText, bd:t.successBorder},
+                        {k:'maybe',e:'🤔', bg:t.warningBg, col:t.warningText, bd:t.warningBorder},
+                        {k:'no',   e:'👎', bg:t.dangerBg,  col:t.dangerText,  bd:t.dangerBorder}
+                      ].map(function(x) {
+                        var act = vote===x.k;
+                        return <button key={x.k} className="p-btn" onClick={function(){setVote(m.id,x.k);}} style={{ width:34, height:30, borderRadius:8, border:'1px solid '+(act?x.bd:t.border), background:act?x.bg:t.surface, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:act?t.btnShadow:'none' }}>{x.e}</button>;
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {isConfirmed && members.length>0 && (
+          <div style={{ marginBottom:14 }}>
+            <FieldLabel>Asistencia</FieldLabel>
+            <div style={{ borderRadius:11, border:'1px solid '+t.border, background:t.inputBg, overflow:'hidden' }}>
+              {members.map(function(m, i) {
+                var wasAbsent = editAbsent.indexOf(m.id)>=0;
+                return (
+                  <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', borderBottom:i<members.length-1?('1px solid '+t.divider):'none' }}>
+                    <div style={{ width:30, height:30, borderRadius:8, background:t.surface, display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, flexShrink:0 }}>{m.avatar}</div>
+                    <span style={{ flex:1, fontSize:13, fontWeight:600, color:t.text }}>{m.name}</span>
+                    <button className="p-btn" onClick={function(){toggleAbs(m.id);}}
+                      style={{ border:'1px solid '+(wasAbsent?t.dangerBorder:t.successBorder), background:wasAbsent?t.dangerBg:t.successBg, color:wasAbsent?t.dangerText:t.successText, borderRadius:8, padding:'4px 11px', cursor:'pointer', fontSize:10, fontWeight:700, fontFamily:'inherit', letterSpacing:'0.04em', boxShadow:t.btnShadow }}>
+                      {wasAbsent?'FALTÓ 💀':'ASISTIÓ ✓'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <button className="p-btn" onClick={handleSave} disabled={!valid}
+          style={{ width:'100%', marginTop:6, padding:'13px', borderRadius:12, border:'none', background:valid?t.primary:t.inputBg, color:valid?(t.isDark?'#000':'#fff'):t.textMuted, fontWeight:800, fontSize:14, cursor:valid?'pointer':'default', fontFamily:'inherit', boxShadow:valid?t.primaryShadow:'none' }}>
+          {isEdit?'Guardar cambios ✓':'Crear panorama 🎉'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── ADD MEMBER MODAL ───────────────────────────────────────
+function AddMemberModal(props) {
+  var onClose=props.onClose; var onSave=props.onSave;
+  var t = useT();
+  var ns=useState(''); var name=ns[0]; var setName=ns[1];
+  var as=useState(AVATARS[Math.floor(Math.random()*AVATARS.length)]); var avatar=as[0]; var setAvatar=as[1];
+  var bs=useState(''); var birthday=bs[0]; var setBirthday=bs[1];
+  var valid = name.trim()!=='';
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200 }} onClick={onClose}>
+      <div className="modal-sheet" style={{ width:'100%', maxWidth:520, maxHeight:'90vh', overflowY:'auto', padding:'24px 18px 34px', borderRadius:'22px 22px 0 0', background:t.modalBg, border:'1px solid '+t.border, borderBottom:'none', boxShadow:t.modalShadow }} onClick={function(e){e.stopPropagation();}}>
+
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:19, fontWeight:800, color:t.text }}>Agregar al grupo</div>
+            <div style={{ fontSize:11, color:t.textMuted, marginTop:2 }}>¿Quién se suma?</div>
+          </div>
+          <ActionBtn onClick={onClose} width={32} height={32} style={{ borderRadius:9, fontSize:14 }}>✕</ActionBtn>
+        </div>
+
+        {/* Avatar preview */}
+        <div style={{ textAlign:'center', marginBottom:18 }}>
+          <div style={{ width:68, height:68, borderRadius:18, background:t.inputBg, border:'2px solid '+t.primary, display:'flex', alignItems:'center', justifyContent:'center', fontSize:38, margin:'0 auto', boxShadow:t.primaryShadow }}>{avatar}</div>
+        </div>
+
+        <FieldLabel>Nombre o apodo</FieldLabel>
+        <input className="p-input" value={name} onChange={function(e){setName(e.target.value);}} placeholder="Ej: El Juancho" style={inpSt(t)} autoFocus />
+
+        <FieldLabel>Cumpleaños (opcional)</FieldLabel>
+        <input className="p-input" type="date" value={birthday} onChange={function(e){setBirthday(e.target.value);}} style={inpSt(t)} />
+
+        <FieldLabel>Avatar — {AVATARS.length} opciones</FieldLabel>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:4, marginBottom:18 }}>
+          {AVATARS.map(function(a) {
+            var act = avatar===a;
+            return <button key={a} className="p-btn" onClick={function(){setAvatar(a);}} style={{ padding:'7px 0', borderRadius:9, border:act?('2px solid '+t.primary):('1px solid '+t.border), background:act?t.primaryBg:t.inputBg, cursor:'pointer', fontSize:21, textAlign:'center', boxShadow:act?t.primaryShadow:'none' }}>{a}</button>;
+          })}
+        </div>
+
+        <button className="p-btn" onClick={function(){if(!valid)return;onSave(name.trim(),avatar,birthday);}} disabled={!valid}
+          style={{ width:'100%', padding:'13px', borderRadius:12, border:'none', background:valid?t.primary:t.inputBg, color:valid?(t.isDark?'#000':'#fff'):t.textMuted, fontWeight:800, fontSize:14, cursor:valid?'pointer':'default', fontFamily:'inherit', boxShadow:valid?t.primaryShadow:'none' }}>
+          Agregar {avatar}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── ATOMS ──────────────────────────────────────────────────
+function ActionBtn(props) {
+  var t = useT();
+  var w   = props.width  || 'auto';
+  var h   = props.height || 36;
+  var col = props.color  || t.textSub;
+  var bg  = props.bg     || t.surface;
+  var bd  = props.bd     || t.border;
+  var pad = w==='auto' ? '0 13px' : '0';
+  return (
+    <button className="p-btn" onClick={props.onClick}
+      style={Object.assign({ background:bg, border:'1px solid '+bd, borderRadius:8, color:col, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', width:w, height:h, padding:pad, boxShadow:t.btnShadow }, props.style||{})}>
+      {props.children}
+    </button>
+  );
+}
+
+function FieldLabel(props) {
+  var t = useT();
+  return <div style={{ fontSize:10, fontWeight:700, color:t.textMuted, marginBottom:6, textTransform:'uppercase', letterSpacing:'0.08em' }}>{props.children}</div>;
+}
+
+function SectionHeader(props) {
+  var t = useT();
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:9, marginTop:props.mt!==undefined?props.mt:16 }}>
+      <div style={{ width:3, height:14, borderRadius:2, background:t.primary, flexShrink:0 }}></div>
+      <span style={{ fontSize:10, fontWeight:700, color:t.textMuted, letterSpacing:'0.1em' }}>{props.label}</span>
+    </div>
+  );
+}
+
+function EmptyBox(props) {
+  var t = useT();
+  return (
+    <div style={{ textAlign:'center', padding:'40px 20px', borderRadius:14, background:t.surface, border:'1px dashed '+t.border, boxShadow:t.cardShadow }}>
+      {props.icon && <div style={{ fontSize:32, marginBottom:10 }}>{props.icon}</div>}
+      {props.title && <div style={{ fontSize:14, fontWeight:700, color:t.text, marginBottom:4 }}>{props.title}</div>}
+      <div style={{ fontSize:12, color:t.textMuted }}>{props.text}</div>
+    </div>
+  );
+}
+
+function inpSt(t) {
+  return { width:'100%', padding:'12px 13px', borderRadius:10, border:'1px solid '+t.inputBorder, background:t.inputBg, color:t.text, fontSize:13, fontFamily:"'Outfit',sans-serif", marginBottom:14, outline:'none', boxSizing:'border-box', boxShadow:'inset 0 1px 3px rgba(0,0,0,0.15)' };
+}
+
+// ── EXPENSE SPLIT ALGORITHM ────────────────────────────────
+function computeBalances(gastos, members) {
+  var balances = {};
+  members.forEach(function(m) { balances[m.id] = 0; });
+  var n = members.length;
+  if (n === 0) return balances;
+  gastos.forEach(function(g) {
+    if (g.finalized) return;
+    var paid = g.paid || {};
+    var splitMode = g.splitMode || 'equal';
+    var exclG = g.excludedMembers || [];
+    var activeM = members.filter(function(m){ return exclG.indexOf(m.id) < 0; });
+    var nonPayers = activeM.filter(function(m){ return m.id !== g.paidBy; });
+    if (splitMode === 'equal') {
+      var share = g.amount / activeM.length;
+      nonPayers.forEach(function(m) {
+        if (!paid[m.id]) {
+          balances[m.id] = (balances[m.id] || 0) - share;
+          balances[g.paidBy] = (balances[g.paidBy] || 0) + share;
+        }
+      });
+    } else {
+      var customAmounts = g.customAmounts || {};
+      nonPayers.forEach(function(m) {
+        var amt = customAmounts[m.id] || 0;
+        if (!paid[m.id] && amt > 0) {
+          balances[m.id] = (balances[m.id] || 0) - amt;
+          balances[g.paidBy] = (balances[g.paidBy] || 0) + amt;
+        }
+      });
+    }
+  });
+  return balances;
+}
+
+function computeTransactions(members, balances) {
+  var debtors = []; var creditors = [];
+  members.forEach(function(m) {
+    var net = Math.round((balances[m.id]||0)*100)/100;
+    if (net < -0.01) debtors.push({ id:m.id, net:net });
+    else if (net > 0.01) creditors.push({ id:m.id, net:net });
+  });
+  debtors.sort(function(a,b){ return a.net - b.net; });
+  creditors.sort(function(a,b){ return b.net - a.net; });
+  var txs = []; var di = 0; var ci = 0;
+  while (di < debtors.length && ci < creditors.length) {
+    var debt = -debtors[di].net;
+    var cred = creditors[ci].net;
+    var amount = Math.min(debt, cred);
+    txs.push({ from:debtors[di].id, to:creditors[ci].id, amount:amount });
+    debtors[di].net += amount;
+    creditors[ci].net -= amount;
+    if (Math.abs(debtors[di].net) < 0.01) di++;
+    if (Math.abs(creditors[ci].net) < 0.01) ci++;
+  }
+  return txs;
+}
+
+// ── GASTO DETAIL (expandable) ─────────────────────────────
+function GastoDetail(props) {
+  var g = props.g; var members = props.members; var onUpdate = props.onUpdate;
+  var t = useT();
+  var noteState = useState(null); var expandedNoteId = noteState[0]; var setExpandedNoteId = noteState[1];
+
+  var splitMode = g.splitMode || 'equal';
+  var paid = g.paid || {};
+  var customAmounts = g.customAmounts || {};
+  var memberNotes = g.memberNotes || {};
+  var exclM = g.excludedMembers || [];
+  var activeMembers = members.filter(function(m){ return exclM.indexOf(m.id) < 0; });
+  var excludedMembers = members.filter(function(m){ return exclM.indexOf(m.id) >= 0; });
+  var n = activeMembers.length;
+  var share = n > 0 ? g.amount / n : 0;
+
+  var pledged = 0; var collected = 0;
+  activeMembers.forEach(function(m) {
+    var amt = splitMode==='equal' ? share : (customAmounts[m.id] || 0);
+    pledged += amt;
+    if (paid[m.id]) collected += amt;
+  });
+
+  function excludeMember(mid) {
+    var next = exclM.concat([mid]);
+    var np = Object.assign({}, paid); delete np[mid];
+    onUpdate({ excludedMembers: next, paid: np });
+  }
+  function includeMember(mid) {
+    onUpdate({ excludedMembers: exclM.filter(function(a){ return a !== mid; }) });
+  }
+
+  function togglePaid(mid) {
+    var np = Object.assign({}, paid); np[mid] = !np[mid];
+    onUpdate({ paid: np });
+  }
+
+  return (
+    <div style={{ padding:'10px 10px 4px', borderRadius:'0 0 10px 10px', background:t.surface }}>
+      {/* Split mode toggle */}
+      <div style={{ display:'flex', gap:6, marginBottom:8 }}>
+        <button onClick={function(){onUpdate({splitMode:'equal'});}}
+          style={{ flex:1, padding:'6px', borderRadius:8, border:'1px solid '+(splitMode==='equal'?t.primaryBorder:t.border), background:splitMode==='equal'?t.primaryBg:t.inputBg, color:splitMode==='equal'?t.primary:t.textSub, fontSize:11, fontWeight:splitMode==='equal'?700:400, cursor:'pointer', fontFamily:'inherit' }}>
+          ÷ Dividir igual
+        </button>
+        <button onClick={function(){onUpdate({splitMode:'custom'});}}
+          style={{ flex:1, padding:'6px', borderRadius:8, border:'1px solid '+(splitMode==='custom'?t.primaryBorder:t.border), background:splitMode==='custom'?t.primaryBg:t.inputBg, color:splitMode==='custom'?t.primary:t.textSub, fontSize:11, fontWeight:splitMode==='custom'?700:400, cursor:'pointer', fontFamily:'inherit' }}>
+          💸 Cada uno pone
+        </button>
+      </div>
+
+      {/* Progress bar (custom mode) */}
+      {splitMode==='custom' && (
+        <div style={{ marginBottom:8, padding:'7px 10px', borderRadius:8, background:t.inputBg, border:'1px solid '+t.border }}>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:t.textMuted, marginBottom:4 }}>
+            <span>Prometido: {fmtCLP(pledged)}</span>
+            <span>Total: {fmtCLP(g.amount)}</span>
+          </div>
+          <div style={{ height:5, borderRadius:3, background:t.border, overflow:'hidden' }}>
+            <div style={{ height:'100%', borderRadius:3, background:pledged>=g.amount?t.success:t.primary, width:Math.min(100,g.amount>0?pledged/g.amount*100:0)+'%', transition:'width 0.3s' }}></div>
+          </div>
+          {collected>0 && <div style={{ fontSize:10, color:t.successText, marginTop:4 }}>✓ Confirmado: {fmtCLP(collected)}</div>}
+        </div>
+      )}
+
+      {/* All member rows (including payer) */}
+      {activeMembers.length===0 && (
+        <div style={{ fontSize:11, color:t.textMuted, textAlign:'center', padding:'8px 0' }}>Sin participantes</div>
+      )}
+      {activeMembers.map(function(m) {
+        var isPayer = m.id === g.paidBy;
+        var hasPaid = !!paid[m.id];
+        var note = memberNotes[m.id] || '';
+        var showNote = expandedNoteId === m.id;
+        // Equal mode: payer is excluded from "¿Pagó?" (already assumed paid)
+        var showPayBtn = !(splitMode === 'equal' && isPayer);
+        // Custom mode: settled rows get green background instead of strikethrough
+        var customSettled = splitMode === 'custom' && hasPaid;
+        var rowBg = customSettled ? t.successBg : 'transparent';
+        var rowBd = customSettled ? t.successBorder : t.divider;
+        return (
+          <div key={m.id} style={{ borderRadius: customSettled ? 8 : 0, overflow:'hidden', marginBottom: customSettled ? 3 : 0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 8px', borderBottom:'1px solid '+rowBd, background:rowBg }}>
+              <span style={{ fontSize:18, flexShrink:0 }}>{m.avatar}</span>
+              <div style={{ flex:1, minWidth:0, overflow:'hidden' }}>
+                <span style={{ fontSize:12, fontWeight:600, color: customSettled ? t.successText : (hasPaid ? t.textMuted : t.text), textDecoration: (!customSettled && hasPaid) ? 'line-through' : 'none' }}>{m.name}</span>
+                {isPayer && <span style={{ fontSize:9, color: customSettled ? t.successText : t.primary, fontWeight:700, marginLeft:5 }}>{customSettled ? '✓ SALDADO' : 'PAGÓ'}</span>}
+              </div>
+              {splitMode==='custom'
+                ? (hasPaid
+                  ? <span style={{ fontSize:12, fontWeight:700, color:t.successText, fontFamily:"'Space Mono',monospace", flexShrink:0 }}>{fmtCLP(customAmounts[m.id]||0)}</span>
+                  : <input type="number" defaultValue={customAmounts[m.id]||''} onBlur={function(e){
+                      var na = Object.assign({}, customAmounts); na[m.id] = parseFloat(e.target.value)||0;
+                      onUpdate({ customAmounts: na });
+                    }} placeholder="0" min="0"
+                    style={{ width:76, padding:'3px 7px', borderRadius:7, border:'1px solid '+t.border, background:t.inputBg, color:t.text, fontSize:12, fontFamily:"'Space Mono',monospace", textAlign:'right', outline:'none' }} />
+                  )
+                : <span style={{ fontSize:12, fontWeight:700, color:hasPaid?t.successText:t.primary, fontFamily:"'Space Mono',monospace", flexShrink:0 }}>{fmtCLP(share)}</span>
+              }
+              <button onClick={function(){setExpandedNoteId(showNote?null:m.id);}}
+                style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, padding:'2px 3px', color:note?(customSettled?t.successText:t.primary):t.textMuted }}>📝</button>
+              {showPayBtn && (
+                <button onClick={function(){togglePaid(m.id);}}
+                  style={{ padding:'4px 9px', borderRadius:7, border:'1px solid '+(hasPaid?t.successBorder:t.border), background:hasPaid?t.successBg:t.inputBg, color:hasPaid?t.successText:t.textSub, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit', flexShrink:0, whiteSpace:'nowrap' }}>
+                  {hasPaid?'✓ Pagó':'¿Pagó?'}
+                </button>
+              )}
+              {!isPayer && (
+                <button onClick={function(){excludeMember(m.id);}}
+                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:14, padding:'2px 3px', color:t.textMuted, flexShrink:0, lineHeight:1 }}>×</button>
+              )}
+            </div>
+            {showNote && (
+              <div style={{ padding:'6px 0 4px 24px', background:rowBg }}>
+                <textarea defaultValue={note} onBlur={function(e){
+                  var nn = Object.assign({}, memberNotes); nn[m.id] = e.target.value;
+                  onUpdate({ memberNotes: nn });
+                }} placeholder={'• Bebida: $2.000\n• Comida: $3.000'} rows={3}
+                  style={{ width:'100%', padding:'7px 9px', borderRadius:8, border:'1px solid '+t.border, background:t.inputBg, color:t.text, fontSize:11, fontFamily:'inherit', resize:'vertical', outline:'none', lineHeight:1.5 }} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Excluded members — can re-add */}
+      {excludedMembers.length>0 && (
+        <div style={{ marginTop:6, paddingTop:6, borderTop:'1px dashed '+t.divider }}>
+          <div style={{ fontSize:9, color:t.textMuted, marginBottom:4, letterSpacing:'0.05em' }}>NO INCLUIDOS</div>
+          {excludedMembers.map(function(m){
+            return (
+              <div key={m.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'4px 0' }}>
+                <span style={{ fontSize:16, opacity:0.45, flexShrink:0 }}>{m.avatar}</span>
+                <span style={{ flex:1, fontSize:11, color:t.textMuted, fontStyle:'italic' }}>{m.name}</span>
+                <button onClick={function(){includeMember(m.id);}}
+                  style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:6, border:'1px solid '+t.primaryBorder, background:t.primaryBg, color:t.primary, cursor:'pointer', fontFamily:'inherit' }}>+ Incluir</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GASTOS VIEW ────────────────────────────────────────────
+function GastosView(props) {
+  var gastos=props.gastos; var members=props.members; var events=props.events;
+  var onRemove=props.onRemove; var onAdd=props.onAdd; var onEdit=props.onEdit; var onUpdate=props.onUpdate;
+  var filterEventId=props.filterEventId; var onClearFilter=props.onClearFilter;
+  var t = useT();
+  var expState = useState(null); var expandedGasto=expState[0]; var setExpandedGasto=expState[1];
+  var cds = useState(null); var confirmDel=cds[0]; var setConfirmDel=cds[1];
+
+  var shown = filterEventId
+    ? gastos.filter(function(g){ return g.eventId === filterEventId; })
+    : gastos;
+  var filteredEvent = filterEventId
+    ? events.find(function(e){ return e.id === filterEventId; })
+    : null;
+
+  var balances = computeBalances(shown, members);
+  var transactions = computeTransactions(members, balances);
+  var total = shown.reduce(function(s, g) { return s + g.amount; }, 0);
+
+  return (
+    <div style={{ paddingTop:14 }}>
+      {filteredEvent && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 13px', marginBottom:12, borderRadius:11, background:t.primaryBg, border:'1px solid '+t.primaryBorder }}>
+          <span style={{ fontSize:13, fontWeight:700, color:t.primary, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>📋 {filteredEvent.title}</span>
+          <button className="p-btn" onClick={onClearFilter}
+            style={{ fontSize:10, fontWeight:700, padding:'4px 10px', borderRadius:8, border:'1px solid '+t.border, background:t.surface, color:t.textSub, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow, flexShrink:0 }}>
+            Ver todos
+          </button>
+        </div>
+      )}
+
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+        <div>
+          <div style={{ fontSize:17, fontWeight:800, color:t.text }}>Gastos</div>
+          <div style={{ fontSize:11, color:t.textMuted }}>{shown.length} gasto{shown.length!==1?'s':''} · {fmtCLP(total)}</div>
+        </div>
+        <button className="p-btn" onClick={onAdd}
+          style={{ padding:'8px 16px', borderRadius:10, border:'1px solid '+t.primaryBorder, background:t.primaryBg, color:t.primary, fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit', boxShadow:t.btnShadow }}>
+          + Agregar
+        </button>
+      </div>
+
+      {shown.length===0
+        ? <EmptyBox icon="💰" title="Sin gastos" text="Registra quién pagó qué" />
+        : shown.slice().reverse().map(function(g) {
+            var payer = members.find(function(m){ return m.id===g.paidBy; });
+            var ev    = !filterEventId ? events.find(function(e){ return e.id===g.eventId; }) : null;
+            var isExp = expandedGasto === g.id;
+            var exclG2 = g.excludedMembers || [];
+            var activeMG = members.filter(function(m){ return exclG2.indexOf(m.id) < 0; });
+            var nonPayers = activeMG.filter(function(m){ return m.id!==g.paidBy; });
+            var isFullyPaid = (g.splitMode||'equal')==='equal'
+              ? nonPayers.length>0 && nonPayers.every(function(m){ return (g.paid||{})[m.id]===true; })
+              : activeMG.length>0 && activeMG.every(function(m){ return (g.paid||{})[m.id]===true; });
+            var cardBg = isFullyPaid ? t.successBg : t.surface;
+            var cardBd = isFullyPaid ? t.successBorder : t.border;
+            return (
+              <div key={g.id} style={{ marginBottom:8 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 13px', borderRadius:isExp?'12px 12px 0 0':'12px', background:cardBg, border:'1px solid '+cardBd, borderBottom:isExp?'none':('1px solid '+cardBd), boxShadow:isExp?'none':t.cardShadow }}>
+                  <div style={{ width:38, height:38, borderRadius:10, background:t.inputBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+                    {payer ? payer.avatar : '💰'}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                      <span style={{ fontWeight:700, fontSize:13, color:t.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{g.description}</span>
+                      {isFullyPaid && <span style={{ fontSize:10, fontWeight:700, color:t.successText, background:t.successBg, border:'1px solid '+t.successBorder, borderRadius:5, padding:'1px 6px', flexShrink:0 }}>✅ Saldado</span>}
+                    </div>
+                    <div style={{ fontSize:10, color:isFullyPaid?t.successText:t.textMuted, marginTop:1 }}>
+                      {payer ? payer.name : '?'} pagó{ev ? ' · '+ev.title : ''}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
+                    <span style={{ fontFamily:"'Space Mono',monospace", fontSize:13, fontWeight:800, color:isFullyPaid?t.successText:t.text }}>{fmtCLP(g.amount)}</span>
+                    <button onClick={function(){setExpandedGasto(isExp?null:g.id); setConfirmDel(null);}}
+                      style={{ background:'none', border:'none', cursor:'pointer', fontSize:12, padding:'3px 5px', color:isExp?t.primary:t.textMuted }}>
+                      {isExp?'▲':'▼'}
+                    </button>
+                    {confirmDel===g.id
+                      ? (
+                        <div style={{ display:'flex', gap:3 }}>
+                          <button className="p-btn" onClick={function(){onRemove(g.id);setConfirmDel(null);}} style={{ padding:'3px 7px', borderRadius:6, border:'1px solid '+t.dangerBorder, background:t.dangerBg, color:t.dangerText, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Sí</button>
+                          <button className="p-btn" onClick={function(){setConfirmDel(null);}} style={{ padding:'3px 7px', borderRadius:6, border:'1px solid '+t.border, background:t.inputBg, color:t.text, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>No</button>
+                        </div>
+                      )
+                      : (
+                        <div style={{ display:'flex', gap:1 }}>
+                          <button onClick={function(){onEdit(g.id);}} style={{ background:'none', border:'none', cursor:'pointer', fontSize:14, padding:'3px 4px', color:t.textMuted }}>✏️</button>
+                          <button onClick={function(){setConfirmDel(g.id);}} style={{ background:'none', border:'none', cursor:'pointer', fontSize:16, padding:'3px 4px', color:t.textMuted }}>✕</button>
+                        </div>
+                      )
+                    }
+                  </div>
+                </div>
+                {isExp && (
+                  <div style={{ border:'1px solid '+cardBd, borderTop:'none', borderRadius:'0 0 12px 12px', boxShadow:t.cardShadow }}>
+                    <GastoDetail g={g} members={members} onUpdate={function(changes){onUpdate(g.id, changes);}} />
+                  </div>
+                )}
+              </div>
+            );
+          })
+      }
+
+      {shown.length>0 && members.length>1 && (
+        <div style={{ marginTop:16 }}>
+          <SectionHeader label="💸  CUENTAS" mt={0} />
+          {transactions.length===0
+            ? (
+              <div style={{ textAlign:'center', padding:'14px', borderRadius:11, background:t.successBg, border:'1px solid '+t.successBorder, fontSize:13, fontWeight:700, color:t.successText }}>
+                ¡Todo al día! ✅
+              </div>
+            )
+            : transactions.map(function(tx, i) {
+                var from = members.find(function(m){ return m.id===tx.from; });
+                var to   = members.find(function(m){ return m.id===tx.to; });
+                return (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'11px 13px', marginBottom:6, borderRadius:11, background:t.surface, border:'1px solid '+t.border, boxShadow:t.cardShadow }}>
+                    <span style={{ fontSize:22 }}>{from?from.avatar:'?'}</span>
+                    <div style={{ flex:1 }}>
+                      <span style={{ fontSize:12, fontWeight:700, color:t.text }}>{from?from.name:'?'}</span>
+                      <span style={{ fontSize:11, color:t.textMuted }}> le paga a </span>
+                      <span style={{ fontSize:12, fontWeight:700, color:t.text }}>{to?to.name:'?'}</span>
+                    </div>
+                    <span style={{ fontSize:22 }}>{to?to.avatar:'?'}</span>
+                    <div style={{ fontFamily:"'Space Mono',monospace", fontSize:14, fontWeight:900, color:t.primary }}>
+                      {fmtCLP(tx.amount)}
+                    </div>
+                  </div>
+                );
+              })
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GASTOS MODAL ───────────────────────────────────────────
+function GastosModal(props) {
+  var onClose=props.onClose; var onSave=props.onSave;
+  var members=props.members; var events=props.events;
+  var ini=props.initial||null;
+  var defaultEventId=ini?ini.eventId||'':(props.defaultEventId||'');
+  var t = useT();
+  var isEdit = !!ini;
+
+  var ds=useState(ini?ini.description:''); var description=ds[0]; var setDescription=ds[1];
+  var as=useState(ini?String(ini.amount):''); var amount=as[0]; var setAmount=as[1];
+  var ps=useState(ini?ini.paidBy:(members.length>0?members[0].id:'')); var paidBy=ps[0]; var setPaidBy=ps[1];
+  var es=useState(defaultEventId); var eventId=es[0]; var setEventId=es[1];
+
+  var valid = description.trim()!=='' && parseFloat(amount)>0 && paidBy!=='';
+
+  function handleSave() {
+    if (!valid) return;
+    onSave({ description:description.trim(), amount:parseFloat(amount), paidBy:paidBy, eventId:eventId||null });
+  }
+
+  // Format display amount with dots for thousands
+  function fmtInput(v) { var n = parseFloat(v); return isNaN(n) ? v : String(Math.round(n)); }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200 }} onClick={onClose}>
+      <div className="modal-sheet" style={{ width:'100%', maxWidth:520, maxHeight:'90vh', overflowY:'auto', padding:'24px 18px 34px', borderRadius:'22px 22px 0 0', background:t.modalBg, border:'1px solid '+t.border, borderBottom:'none', boxShadow:t.modalShadow }} onClick={function(e){e.stopPropagation();}}>
+
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
+          <div>
+            <div style={{ fontSize:19, fontWeight:800, color:t.text }}>{isEdit?'Editar gasto':'Nuevo gasto'}</div>
+            <div style={{ fontSize:11, color:t.textMuted, marginTop:2 }}>¿Quién pagó qué?</div>
+          </div>
+          <ActionBtn onClick={onClose} width={32} height={32} style={{ borderRadius:9, fontSize:14 }}>✕</ActionBtn>
+        </div>
+
+        <FieldLabel>Descripción</FieldLabel>
+        <input className="p-input" value={description} onChange={function(e){setDescription(e.target.value);}} placeholder="Ej: Asado, cervezas, bencina..." style={inpSt(t)} autoFocus />
+
+        <FieldLabel>Monto ($)</FieldLabel>
+        <div style={{ position:'relative', marginBottom:14 }}>
+          <input className="p-input" type="number" value={amount} onChange={function(e){setAmount(e.target.value);}} placeholder="0" min="0" step="100"
+            style={Object.assign({},inpSt(t),{marginBottom:0, paddingRight:90})} />
+          {parseFloat(amount)>0 && (
+            <span style={{ position:'absolute', right:13, top:'50%', transform:'translateY(-50%)', fontSize:11, color:t.primary, fontFamily:"'Space Mono',monospace", pointerEvents:'none' }}>
+              {fmtCLP(parseFloat(amount))}
+            </span>
+          )}
+        </div>
+
+        <FieldLabel>¿Quién pagó?</FieldLabel>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+          {members.map(function(m) {
+            var act = paidBy===m.id;
+            return (
+              <button key={m.id} className="p-btn" onClick={function(){setPaidBy(m.id);}}
+                style={{ padding:'10px 4px', borderRadius:11, border:act?('2px solid '+t.primary):('1px solid '+t.border), background:act?t.primaryBg:t.inputBg, cursor:'pointer', color:act?t.primary:t.textSub, fontSize:10, fontFamily:'inherit', fontWeight:act?700:400, textAlign:'center', boxShadow:act?t.btnShadow:'none' }}>
+                <span style={{ fontSize:22, display:'block', marginBottom:2 }}>{m.avatar}</span>
+                {m.name.split(' ')[0]}
+              </button>
+            );
+          })}
+          {members.length===0 && <div style={{ gridColumn:'1/-1', fontSize:12, color:t.textMuted, textAlign:'center', padding:'12px 0' }}>Agrega participantes en la pestaña Grupo</div>}
+        </div>
+
+        <FieldLabel>Panorama (opcional)</FieldLabel>
+        <select className="p-input" value={eventId} onChange={function(e){setEventId(e.target.value);}} style={Object.assign({},inpSt(t),{appearance:'auto'})}>
+          <option value="">Sin panorama</option>
+          {events.map(function(ev) {
+            return <option key={ev.id} value={ev.id}>{ev.title}</option>;
+          })}
+        </select>
+
+        <button className="p-btn" onClick={handleSave} disabled={!valid}
+          style={{ width:'100%', marginTop:6, padding:'13px', borderRadius:12, border:'none', background:valid?t.primary:t.inputBg, color:valid?(t.isDark?'#000':'#fff'):t.textMuted, fontWeight:800, fontSize:14, cursor:valid?'pointer':'default', fontFamily:'inherit', boxShadow:valid?t.primaryShadow:'none' }}>
+          {isEdit ? 'Guardar cambios ✓' : 'Agregar gasto 💰'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── EDIT MEMBER MODAL ──────────────────────────────────────
+function EditMemberModal(props) {
+  var member=props.member; var onClose=props.onClose; var onSave=props.onSave;
+  var t = useT();
+  if (!member) return null;
+  var ns=useState(member.name); var name=ns[0]; var setName=ns[1];
+  var as=useState(member.avatar); var avatar=as[0]; var setAvatar=as[1];
+  var bs=useState(member.birthday||''); var birthday=bs[0]; var setBirthday=bs[1];
+  var valid = name.trim()!=='';
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200 }} onClick={onClose}>
+      <div className="modal-sheet" style={{ width:'100%', maxWidth:520, maxHeight:'90vh', overflowY:'auto', padding:'24px 18px 34px', borderRadius:'22px 22px 0 0', background:t.modalBg, border:'1px solid '+t.border, borderBottom:'none', boxShadow:t.modalShadow }} onClick={function(e){e.stopPropagation();}}>
+
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:19, fontWeight:800, color:t.text }}>Editar participante</div>
+            <div style={{ fontSize:11, color:t.textMuted, marginTop:2 }}>Modifica los datos</div>
+          </div>
+          <ActionBtn onClick={onClose} width={32} height={32} style={{ borderRadius:9, fontSize:14 }}>✕</ActionBtn>
+        </div>
+
+        <div style={{ textAlign:'center', marginBottom:18 }}>
+          <div style={{ width:68, height:68, borderRadius:18, background:t.inputBg, border:'2px solid '+t.primary, display:'flex', alignItems:'center', justifyContent:'center', fontSize:38, margin:'0 auto', boxShadow:t.primaryShadow }}>{avatar}</div>
+        </div>
+
+        <FieldLabel>Nombre o apodo</FieldLabel>
+        <input className="p-input" value={name} onChange={function(e){setName(e.target.value);}} placeholder="Ej: El Juancho" style={inpSt(t)} autoFocus />
+
+        <FieldLabel>Cumpleaños (opcional)</FieldLabel>
+        <input className="p-input" type="date" value={birthday} onChange={function(e){setBirthday(e.target.value);}} style={inpSt(t)} />
+
+        <FieldLabel>Avatar — {AVATARS.length} opciones</FieldLabel>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:4, marginBottom:18 }}>
+          {AVATARS.map(function(a) {
+            var act = avatar===a;
+            return <button key={a} className="p-btn" onClick={function(){setAvatar(a);}} style={{ padding:'7px 0', borderRadius:9, border:act?('2px solid '+t.primary):('1px solid '+t.border), background:act?t.primaryBg:t.inputBg, cursor:'pointer', fontSize:21, textAlign:'center', boxShadow:act?t.primaryShadow:'none' }}>{a}</button>;
+          })}
+        </div>
+
+        <button className="p-btn" onClick={function(){if(!valid)return;onSave(name.trim(),avatar,birthday);}} disabled={!valid}
+          style={{ width:'100%', padding:'13px', borderRadius:12, border:'none', background:valid?t.primary:t.inputBg, color:valid?(t.isDark?'#000':'#fff'):t.textMuted, fontWeight:800, fontSize:14, cursor:valid?'pointer':'default', fontFamily:'inherit', boxShadow:valid?t.primaryShadow:'none' }}>
+          Guardar cambios ✓
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── MOUNT ──────────────────────────────────────────────────
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
