@@ -99,6 +99,25 @@ export default function PanoramasApp() {
     if (loaded) saveData("panoramas-events", events);
   }, [events, loaded]);
 
+  useEffect(() => {
+    if (!loaded) return;
+    const todayKey = dateKey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    setEvents(prev => {
+      let changed = false;
+      const next = prev.map(ev => {
+        if (ev.status !== "voting") return ev;
+        if (ev.date > todayKey) return ev;
+        const yesVotes = Object.values(ev.votes).filter(v => v === "yes").length;
+        if (yesVotes < (ev.minVoters ?? 1)) {
+          changed = true;
+          return { ...ev, status: "cancelled" };
+        }
+        return ev;
+      });
+      return changed ? next : prev;
+    });
+  }, [loaded]);
+
   const feriadoMap = useMemo(() => {
     const m = {};
     FERIADOS_CHILE_2026.forEach(f => { m[f.date] = f; });
@@ -121,6 +140,21 @@ export default function PanoramasApp() {
       if (ev.status === "confirmed") {
         members.forEach(m => {
           if (ev.absent && ev.absent.includes(m.id)) {
+            counts[m.id] = (counts[m.id] || 0) + 1;
+          }
+        });
+      }
+    });
+    return counts;
+  }, [events, members]);
+
+  const bombas = useMemo(() => {
+    const counts = {};
+    members.forEach(m => { counts[m.id] = 0; });
+    events.forEach(ev => {
+      if (ev.status === "cancelled") {
+        members.forEach(m => {
+          if (ev.votes[m.id] === undefined) {
             counts[m.id] = (counts[m.id] || 0) + 1;
           }
         });
@@ -154,6 +188,9 @@ export default function PanoramasApp() {
   function deleteEvent(eventId) {
     setEvents(prev => prev.filter(e => e.id !== eventId));
     setSelectedEvent(null);
+  }
+  function cancelEvent(eventId) {
+    setEvents(prev => prev.map(e => e.id === eventId ? { ...e, status: "cancelled" } : e));
   }
 
   if (!loaded) return (
@@ -280,6 +317,7 @@ export default function PanoramasApp() {
           <EventsView
             events={events} members={members}
             onVote={voteEvent} onConfirm={confirmEvent}
+            onCancel={cancelEvent}
             onMarkAbsent={markAbsent} onDelete={deleteEvent}
             onNew={() => setShowNewEvent(true)}
             selectedEvent={selectedEvent}
@@ -287,12 +325,13 @@ export default function PanoramasApp() {
           />
         )}
         {view === "ranking" && (
-          <RankingView members={members} absences={absences} events={events} />
+          <RankingView members={members} absences={absences} bombas={bombas} events={events} />
         )}
         {view === "members" && (
           <MembersView
             members={members}
             absences={absences}
+            bombas={bombas}
             onAdd={() => setShowAddMember(true)}
             onRemove={removeMember}
           />
@@ -563,15 +602,16 @@ const navBtn = {
 };
 
 // ─── EVENTS VIEW ──────────────────────────────────────
-function EventsView({ events, members, onVote, onConfirm, onMarkAbsent, onDelete, onNew, selectedEvent, setSelectedEvent }) {
+function EventsView({ events, members, onVote, onConfirm, onCancel, onMarkAbsent, onDelete, onNew, selectedEvent, setSelectedEvent }) {
   const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
   const voting = sorted.filter(e => e.status === "voting");
   const confirmed = sorted.filter(e => e.status === "confirmed");
+  const cancelled = sorted.filter(e => e.status === "cancelled");
 
   if (selectedEvent) {
     const ev = events.find(e => e.id === selectedEvent);
     if (!ev) { setSelectedEvent(null); return null; }
-    return <EventDetail ev={ev} members={members} onVote={onVote} onConfirm={onConfirm} onMarkAbsent={onMarkAbsent} onDelete={onDelete} onBack={() => setSelectedEvent(null)} />;
+    return <EventDetail ev={ev} members={members} onVote={onVote} onConfirm={onConfirm} onCancel={onCancel} onMarkAbsent={onMarkAbsent} onDelete={onDelete} onBack={() => setSelectedEvent(null)} />;
   }
 
   return (
@@ -622,6 +662,19 @@ function EventsView({ events, members, onVote, onConfirm, onMarkAbsent, onDelete
               {confirmed.map(ev => <EventCard key={ev.id} ev={ev} members={members} onClick={() => setSelectedEvent(ev.id)} />)}
             </>
           )}
+          {cancelled.length > 0 && (
+            <>
+              <div style={{ ...sectionTitle, marginTop: (voting.length > 0 || confirmed.length > 0) ? 24 : 0 }}>
+                <span>💨</span>
+                <span>Cancelados</span>
+                <span style={{
+                  marginLeft: 8, fontSize: 11, padding: "2px 8px",
+                  borderRadius: 20, background: "rgba(100,100,100,0.2)", color: "rgba(255,255,255,0.4)",
+                }}>{cancelled.length}</span>
+              </div>
+              {cancelled.map(ev => <EventCard key={ev.id} ev={ev} members={members} onClick={() => setSelectedEvent(ev.id)} />)}
+            </>
+          )}
         </>
       )}
     </div>
@@ -669,13 +722,13 @@ function EventCard({ ev, members, onClick }) {
         </div>
         <span style={{
           fontSize: 10, padding: "4px 10px", borderRadius: 20, fontWeight: 700,
-          background: ev.status === "voting" ? "rgba(251,191,36,0.12)" : "rgba(16,185,129,0.12)",
-          color: ev.status === "voting" ? "#fbbf24" : "#34d399",
-          border: `1px solid ${ev.status === "voting" ? "rgba(251,191,36,0.2)" : "rgba(16,185,129,0.2)"}`,
+          background: ev.status === "voting" ? "rgba(251,191,36,0.12)" : ev.status === "confirmed" ? "rgba(16,185,129,0.12)" : "rgba(100,100,100,0.15)",
+          color: ev.status === "voting" ? "#fbbf24" : ev.status === "confirmed" ? "#34d399" : "rgba(255,255,255,0.35)",
+          border: `1px solid ${ev.status === "voting" ? "rgba(251,191,36,0.2)" : ev.status === "confirmed" ? "rgba(16,185,129,0.2)" : "rgba(255,255,255,0.1)"}`,
           flexShrink: 0,
           letterSpacing: "0.04em",
         }}>
-          {ev.status === "voting" ? "VOTANDO" : "CONFIRMADO"}
+          {ev.status === "voting" ? "VOTANDO" : ev.status === "confirmed" ? "CONFIRMADO" : "CANCELADO"}
         </span>
       </div>
       {total > 0 && (
@@ -696,7 +749,7 @@ function EventCard({ ev, members, onClick }) {
 }
 
 // ─── EVENT DETAIL ──────────────────────────────────────
-function EventDetail({ ev, members, onVote, onConfirm, onMarkAbsent, onDelete, onBack }) {
+function EventDetail({ ev, members, onVote, onConfirm, onCancel, onMarkAbsent, onDelete, onBack }) {
   const cat = CATEGORIES.find(c => c.id === ev.category);
   const yesVotes = Object.values(ev.votes).filter(v => v === "yes").length;
   const noVotes = Object.values(ev.votes).filter(v => v === "no").length;
@@ -757,8 +810,19 @@ function EventDetail({ ev, members, onVote, onConfirm, onMarkAbsent, onDelete, o
         backdropFilter: "blur(12px)",
       }}>
         <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#c4b5fd", display: "flex", alignItems: "center", gap: 6 }}>
-          {ev.status === "voting" ? <><span>🗳️</span><span>Votación</span></> : <><span>✅</span><span>Asistencia</span></>}
+          {ev.status === "voting" ? <><span>🗳️</span><span>Votación</span></> : ev.status === "confirmed" ? <><span>✅</span><span>Asistencia</span></> : <><span>💨</span><span>Cancelado — sin quórum</span></>}
         </h3>
+
+        {ev.status === "cancelled" && (
+          <div style={{
+            padding: "10px 14px", borderRadius: 12, marginBottom: 14,
+            background: "rgba(100,100,100,0.1)", border: "1px solid rgba(255,255,255,0.08)",
+            fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.5,
+          }}>
+            El evento no alcanzó el mínimo de <strong style={{ color: "rgba(255,255,255,0.7)" }}>{ev.minVoters ?? 1} sí</strong> antes de la fecha.
+            Los que no votaron quedan como <strong style={{ color: "#fbbf24" }}>bombas de humo 💨</strong>.
+          </div>
+        )}
 
         {members.length === 0 ? (
           <p style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", textAlign: "center", padding: "16px 0" }}>
@@ -807,7 +871,7 @@ function EventDetail({ ev, members, onVote, onConfirm, onMarkAbsent, onDelete, o
                       boxShadow: vote === "no" ? "0 0 12px rgba(239,68,68,0.2)" : "none",
                     }}>👎</button>
                   </div>
-                ) : (
+                ) : ev.status === "confirmed" ? (
                   <button onClick={() => onMarkAbsent(ev.id, m.id)} style={{
                     ...voteBtn,
                     width: "auto",
@@ -820,6 +884,16 @@ function EventDetail({ ev, members, onVote, onConfirm, onMarkAbsent, onDelete, o
                   }}>
                     {isAbsent ? "FALTÓ 💀" : "ASISTIÓ ✓"}
                   </button>
+                ) : (
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, letterSpacing: "0.03em",
+                    color: vote === "no" ? "rgba(255,255,255,0.35)" : vote === undefined ? "#fbbf24" : "rgba(255,255,255,0.35)",
+                    padding: "5px 10px", borderRadius: 10,
+                    background: vote === undefined ? "rgba(251,191,36,0.1)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${vote === undefined ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.07)"}`,
+                  }}>
+                    {vote === "yes" ? "Quería ir" : vote === "maybe" ? "Quizás" : vote === "no" ? "No iba" : "💨 No votó"}
+                  </span>
                 )}
               </div>
             );
@@ -847,17 +921,30 @@ function EventDetail({ ev, members, onVote, onConfirm, onMarkAbsent, onDelete, o
         )}
 
         {ev.status === "voting" && (
-          <button onClick={() => onConfirm(ev.id)} style={{
-            width: "100%", marginTop: 14, padding: "13px",
-            borderRadius: 14, border: "none",
-            background: "linear-gradient(135deg, #7c6ff7, #a855f7)",
-            color: "#fff", fontWeight: 700, fontSize: 14,
-            cursor: "pointer", fontFamily: "inherit",
-            boxShadow: "0 4px 16px rgba(124,111,247,0.35)",
-            letterSpacing: "0.02em",
-          }}>
-            Confirmar panorama ✓
-          </button>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button onClick={() => onConfirm(ev.id)} style={{
+              flex: 1, padding: "13px",
+              borderRadius: 14, border: "none",
+              background: "linear-gradient(135deg, #7c6ff7, #a855f7)",
+              color: "#fff", fontWeight: 700, fontSize: 14,
+              cursor: "pointer", fontFamily: "inherit",
+              boxShadow: "0 4px 16px rgba(124,111,247,0.35)",
+              letterSpacing: "0.02em",
+            }}>
+              Confirmar ✓
+            </button>
+            <button onClick={() => onCancel(ev.id)} style={{
+              padding: "13px 16px",
+              borderRadius: 14,
+              border: "1px solid rgba(251,191,36,0.25)",
+              background: "rgba(251,191,36,0.08)",
+              color: "#fbbf24", fontWeight: 700, fontSize: 13,
+              cursor: "pointer", fontFamily: "inherit",
+              letterSpacing: "0.02em",
+            }}>
+              💨 Cancelar
+            </button>
+          </div>
         )}
       </div>
 
@@ -888,10 +975,15 @@ const voteBtn = {
 };
 
 // ─── RANKING VIEW ──────────────────────────────────────
-function RankingView({ members, absences, events }) {
+function RankingView({ members, absences, bombas, events }) {
   const confirmedEvents = events.filter(e => e.status === "confirmed");
-  const sorted = [...members].sort((a, b) => (absences[b.id] || 0) - (absences[a.id] || 0));
-  const maxAbs = Math.max(...Object.values(absences), 1);
+  const cancelledEvents = events.filter(e => e.status === "cancelled");
+  const sorted = [...members].sort((a, b) => {
+    const scoreB = (absences[b.id] || 0) + (bombas[b.id] || 0);
+    const scoreA = (absences[a.id] || 0) + (bombas[a.id] || 0);
+    return scoreB - scoreA;
+  });
+  const maxScore = Math.max(...members.map(m => (absences[m.id] || 0) + (bombas[m.id] || 0)), 1);
 
   return (
     <div style={{ paddingTop: 8 }}>
@@ -918,21 +1010,19 @@ function RankingView({ members, absences, events }) {
         </div>
       ) : (
         sorted.map((m, i) => {
-          const count = absences[m.id] || 0;
-          const pct = (count / maxAbs) * 100;
-          const isWorst = i === 0 && count > 0;
+          const faltas = absences[m.id] || 0;
+          const humos = bombas[m.id] || 0;
+          const total = faltas + humos;
+          const pct = (total / maxScore) * 100;
+          const isWorst = i === 0 && total > 0;
 
           return (
             <div key={m.id} style={{
               display: "flex", alignItems: "center", gap: 12,
               padding: "14px 16px", marginBottom: 8,
               borderRadius: 18,
-              background: isWorst
-                ? "rgba(239,68,68,0.07)"
-                : "rgba(255,255,255,0.025)",
-              border: isWorst
-                ? "1px solid rgba(239,68,68,0.18)"
-                : "1px solid rgba(255,255,255,0.05)",
+              background: isWorst ? "rgba(239,68,68,0.07)" : "rgba(255,255,255,0.025)",
+              border: isWorst ? "1px solid rgba(239,68,68,0.18)" : "1px solid rgba(255,255,255,0.05)",
               backdropFilter: "blur(8px)",
               transition: "all 0.15s",
             }}>
@@ -957,29 +1047,20 @@ function RankingView({ members, absences, events }) {
                   <div style={{
                     height: "100%", borderRadius: 3,
                     width: `${pct}%`,
-                    background: count > 2
-                      ? "linear-gradient(90deg, #ef4444, #f97316)"
-                      : count > 0
-                        ? "linear-gradient(90deg, #fbbf24, #f97316)"
-                        : "transparent",
+                    background: total > 2 ? "linear-gradient(90deg, #ef4444, #f97316)" : total > 0 ? "linear-gradient(90deg, #fbbf24, #f97316)" : "transparent",
                     transition: "width 0.4s ease",
-                    boxShadow: count > 0 ? "0 0 8px rgba(239,68,68,0.3)" : "none",
+                    boxShadow: total > 0 ? "0 0 8px rgba(239,68,68,0.3)" : "none",
                   }} />
                 </div>
-                {count > 0 && (
-                  <div style={{ fontSize: 10, marginTop: 4, letterSpacing: 1 }}>
-                    {"💀".repeat(Math.min(count, 8))}
-                  </div>
-                )}
+                <div style={{ fontSize: 10, marginTop: 4, display: "flex", gap: 6 }}>
+                  {faltas > 0 && <span>{"💀".repeat(Math.min(faltas, 5))}</span>}
+                  {humos > 0 && <span>{"💨".repeat(Math.min(humos, 5))}</span>}
+                </div>
               </div>
-              <div style={{ textAlign: "right", minWidth: 40 }}>
-                <div style={{
-                  fontSize: 26, fontWeight: 900,
-                  fontFamily: "'Space Mono', monospace",
-                  color: count > 2 ? "#ef4444" : count > 0 ? "#fbbf24" : "#34d399",
-                  lineHeight: 1,
-                }}>{count}</div>
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginTop: 2, letterSpacing: "0.06em" }}>FALTAS</div>
+              <div style={{ textAlign: "right", minWidth: 48 }}>
+                {faltas > 0 && <div style={{ fontSize: 11, color: "#fca5a5", fontFamily: "'Space Mono', monospace" }}>💀 {faltas}</div>}
+                {humos > 0 && <div style={{ fontSize: 11, color: "#fbbf24", fontFamily: "'Space Mono', monospace" }}>💨 {humos}</div>}
+                {total === 0 && <div style={{ fontSize: 18, color: "#34d399" }}>✓</div>}
               </div>
             </div>
           );
@@ -987,7 +1068,7 @@ function RankingView({ members, absences, events }) {
       )}
 
       {/* Stats bento grid */}
-      {confirmedEvents.length > 0 && (
+      {(confirmedEvents.length > 0 || cancelledEvents.length > 0) && (
         <div style={{ marginTop: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
@@ -996,10 +1077,10 @@ function RankingView({ members, absences, events }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {[
-              { value: events.length, label: "Panoramas", color: "#a5b4fc", bg: "rgba(124,111,247,0.08)", border: "rgba(124,111,247,0.15)" },
               { value: confirmedEvents.length, label: "Confirmados", color: "#34d399", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.15)" },
-              { value: Object.values(absences).reduce((a, b) => a + b, 0), label: "Faltas totales", color: "#ef4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.15)" },
-              { value: members.length, label: "Integrantes", color: "#fbbf24", bg: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.15)" },
+              { value: cancelledEvents.length, label: "Cancelados", color: "rgba(255,255,255,0.4)", bg: "rgba(100,100,100,0.08)", border: "rgba(255,255,255,0.08)" },
+              { value: Object.values(absences).reduce((a, b) => a + b, 0), label: "💀 Faltas", color: "#ef4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.15)" },
+              { value: Object.values(bombas).reduce((a, b) => a + b, 0), label: "💨 Bombas", color: "#fbbf24", bg: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.15)" },
             ].map(stat => (
               <div key={stat.label} style={{
                 textAlign: "center", padding: "16px 12px",
@@ -1023,7 +1104,7 @@ function RankingView({ members, absences, events }) {
 }
 
 // ─── MEMBERS VIEW ──────────────────────────────────────
-function MembersView({ members, absences, onAdd, onRemove }) {
+function MembersView({ members, absences, bombas, onAdd, onRemove }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   return (
@@ -1084,8 +1165,10 @@ function MembersView({ members, absences, onAdd, onRemove }) {
             }}>{m.avatar}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 15, color: "#e0d7ff" }}>{m.name}</div>
-              <div style={{ fontSize: 11, color: absences[m.id] > 0 ? "#fca5a5" : "rgba(255,255,255,0.3)", marginTop: 1 }}>
-                {absences[m.id] > 0 ? `💀 ${absences[m.id]} falta${absences[m.id] !== 1 ? "s" : ""}` : "Sin faltas ✓"}
+              <div style={{ display: "flex", gap: 8, marginTop: 1 }}>
+                {absences[m.id] > 0 && <span style={{ fontSize: 11, color: "#fca5a5" }}>💀 {absences[m.id]} falta{absences[m.id] !== 1 ? "s" : ""}</span>}
+                {bombas[m.id] > 0 && <span style={{ fontSize: 11, color: "#fbbf24" }}>💨 {bombas[m.id]} bomba{bombas[m.id] !== 1 ? "s" : ""}</span>}
+                {!absences[m.id] && !bombas[m.id] && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>Sin faltas ✓</span>}
               </div>
             </div>
             {confirmDelete === m.id ? (
@@ -1128,6 +1211,7 @@ function NewEventModal({ date, members, onClose, onSave }) {
   const [eventDate, setEventDate] = useState(date || "");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  const [minVoters, setMinVoters] = useState(Math.max(1, Math.ceil((members.length || 2) / 2)));
 
   return (
     <div style={modalOverlay} onClick={onClose}>
@@ -1177,9 +1261,27 @@ function NewEventModal({ date, members, onClose, onSave }) {
         <label style={labelStyle}>Descripción (opcional)</label>
         <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Detalles, qué llevar, etc..." rows={3} style={{ ...inputStyle, resize: "vertical" }} />
 
+        <label style={labelStyle}>Mín. de "sí" para confirmar</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+          <button onClick={() => setMinVoters(v => Math.max(1, v - 1))} style={{
+            width: 34, height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)",
+            background: "rgba(255,255,255,0.06)", color: "#e0d7ff", fontSize: 18,
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          }}>−</button>
+          <div style={{
+            flex: 1, textAlign: "center", fontFamily: "'Space Mono', monospace",
+            fontSize: 20, fontWeight: 700, color: "#c4b5fd",
+          }}>{minVoters}</div>
+          <button onClick={() => setMinVoters(v => Math.min(members.length || 99, v + 1))} style={{
+            width: 34, height: 34, borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)",
+            background: "rgba(255,255,255,0.06)", color: "#e0d7ff", fontSize: 18,
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          }}>+</button>
+        </div>
+
         <button onClick={() => {
           if (!title.trim() || !eventDate) return;
-          onSave({ title: title.trim(), category, date: eventDate, description: description.trim(), location: location.trim() });
+          onSave({ title: title.trim(), category, date: eventDate, description: description.trim(), location: location.trim(), minVoters });
         }} disabled={!title.trim() || !eventDate} style={{
           width: "100%", marginTop: 4, padding: "14px",
           borderRadius: 14, border: "none",
