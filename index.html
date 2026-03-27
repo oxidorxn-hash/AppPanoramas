@@ -180,27 +180,54 @@ function load(k, fb)       { try { var r = localStorage.getItem(k); return r ? J
 function save(k, v)        { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {} }
 
 // Calendar export helpers
+function calDatetime(date, time, offsetHours) {
+  // Returns "YYYYMMDDTHHmmss" adding offsetHours to the time
+  var base = new Date(date + 'T' + (time || '00:00') + ':00');
+  if (offsetHours) base.setHours(base.getHours() + offsetHours);
+  return base.getFullYear()
+    + String(base.getMonth()+1).padStart(2,'0')
+    + String(base.getDate()).padStart(2,'0')
+    + 'T'
+    + String(base.getHours()).padStart(2,'0')
+    + String(base.getMinutes()).padStart(2,'0')
+    + '00';
+}
 function googleCalUrl(ev) {
-  var d = ev.date.replace(/-/g, '');
-  // end date = next day for all-day event
-  var nd = new Date(ev.date + 'T12:00:00');
-  nd.setDate(nd.getDate() + 1);
-  var ed = nd.getFullYear() + String(nd.getMonth()+1).padStart(2,'0') + String(nd.getDate()).padStart(2,'0');
+  var hasTime = ev.time && ev.time.trim() !== '';
+  var start, end;
+  if (hasTime) {
+    start = calDatetime(ev.date, ev.time, 0);
+    end   = calDatetime(ev.date, ev.time, 2); // 2h por defecto
+  } else {
+    start = ev.date.replace(/-/g, '');
+    var nd = new Date(ev.date + 'T12:00:00');
+    nd.setDate(nd.getDate() + 1);
+    end = nd.getFullYear() + String(nd.getMonth()+1).padStart(2,'0') + String(nd.getDate()).padStart(2,'0');
+  }
   return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
     + '&text=' + encodeURIComponent(ev.title)
-    + '&dates=' + d + '/' + ed
+    + '&dates=' + start + '/' + end
     + '&details=' + encodeURIComponent(ev.description || '')
     + '&location=' + encodeURIComponent(ev.location || '');
 }
 function downloadICS(ev) {
-  var d = ev.date.replace(/-/g, '');
-  var nd = new Date(ev.date + 'T12:00:00');
-  nd.setDate(nd.getDate() + 1);
-  var ed = nd.getFullYear() + String(nd.getMonth()+1).padStart(2,'0') + String(nd.getDate()).padStart(2,'0');
+  var hasTime = ev.time && ev.time.trim() !== '';
+  var dtStart, dtEnd;
+  if (hasTime) {
+    dtStart = 'DTSTART:' + calDatetime(ev.date, ev.time, 0);
+    dtEnd   = 'DTEND:'   + calDatetime(ev.date, ev.time, 2);
+  } else {
+    var d  = ev.date.replace(/-/g, '');
+    var nd = new Date(ev.date + 'T12:00:00');
+    nd.setDate(nd.getDate() + 1);
+    var ed = nd.getFullYear() + String(nd.getMonth()+1).padStart(2,'0') + String(nd.getDate()).padStart(2,'0');
+    dtStart = 'DTSTART;VALUE=DATE:' + d;
+    dtEnd   = 'DTEND;VALUE=DATE:'   + ed;
+  }
   var stamp = new Date().toISOString().replace(/[-:.]/g,'').slice(0,15) + 'Z';
   var ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Detox Panoramas//ES\r\nBEGIN:VEVENT\r\n'
-    + 'DTSTART;VALUE=DATE:' + d + '\r\n'
-    + 'DTEND;VALUE=DATE:' + ed + '\r\n'
+    + dtStart + '\r\n'
+    + dtEnd   + '\r\n'
     + 'DTSTAMP:' + stamp + '\r\n'
     + 'SUMMARY:' + ev.title + '\r\n'
     + 'DESCRIPTION:' + (ev.description || '') + '\r\n'
