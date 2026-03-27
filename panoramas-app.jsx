@@ -101,6 +101,16 @@ export default function PanoramasApp() {
 
   useEffect(() => {
     if (!loaded) return;
+    const params = new URLSearchParams(window.location.search);
+    const eventId = params.get("event");
+    if (eventId) {
+      setSelectedEvent(eventId);
+      setView("events");
+    }
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
     const todayKey = dateKey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
     setEvents(prev => {
       let changed = false;
@@ -603,16 +613,24 @@ const navBtn = {
 
 // ─── EVENTS VIEW ──────────────────────────────────────
 function EventsView({ events, members, onVote, onConfirm, onCancel, onMarkAbsent, onDelete, onNew, selectedEvent, setSelectedEvent }) {
+  const [showHistorial, setShowHistorial] = useState(false);
+  const todayKey = dateKey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
   const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
-  const voting = sorted.filter(e => e.status === "voting");
-  const confirmed = sorted.filter(e => e.status === "confirmed");
-  const cancelled = sorted.filter(e => e.status === "cancelled");
+
+  const upcoming = sorted.filter(e => e.date >= todayKey);
+  const historial = sorted.filter(e => e.date < todayKey);
+
+  const voting = upcoming.filter(e => e.status === "voting");
+  const confirmed = upcoming.filter(e => e.status === "confirmed");
+  const cancelled = upcoming.filter(e => e.status === "cancelled");
 
   if (selectedEvent) {
     const ev = events.find(e => e.id === selectedEvent);
     if (!ev) { setSelectedEvent(null); return null; }
     return <EventDetail ev={ev} members={members} onVote={onVote} onConfirm={onConfirm} onCancel={onCancel} onMarkAbsent={onMarkAbsent} onDelete={onDelete} onBack={() => setSelectedEvent(null)} />;
   }
+
+  const hasActive = voting.length > 0 || confirmed.length > 0 || cancelled.length > 0;
 
   return (
     <div style={{ paddingTop: 8 }}>
@@ -636,6 +654,15 @@ function EventsView({ events, members, onVote, onConfirm, onCancel, onMarkAbsent
         </div>
       ) : (
         <>
+          {!hasActive && historial.length > 0 && (
+            <div style={{
+              textAlign: "center", padding: "28px 20px 20px",
+              borderRadius: 20, background: "rgba(255,255,255,0.02)",
+              border: "1px dashed rgba(255,255,255,0.07)", marginBottom: 16,
+            }}>
+              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.3)", margin: 0 }}>No hay panoramas próximos</p>
+            </div>
+          )}
           {voting.length > 0 && (
             <>
               <div style={sectionTitle}>
@@ -675,6 +702,25 @@ function EventsView({ events, members, onVote, onConfirm, onCancel, onMarkAbsent
               {cancelled.map(ev => <EventCard key={ev.id} ev={ev} members={members} onClick={() => setSelectedEvent(ev.id)} />)}
             </>
           )}
+
+          {historial.length > 0 && (
+            <div style={{ marginTop: hasActive ? 28 : 0 }}>
+              <button onClick={() => setShowHistorial(v => !v)} style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 8,
+                background: "none", border: "none", cursor: "pointer",
+                padding: "10px 0", marginBottom: showHistorial ? 12 : 0,
+              }}>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.25)", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
+                  {showHistorial ? "▲" : "▼"} HISTORIAL ({historial.length})
+                </span>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+              </button>
+              {showHistorial && historial.map(ev => (
+                <EventCard key={ev.id} ev={ev} members={members} onClick={() => setSelectedEvent(ev.id)} dimmed />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
@@ -687,7 +733,7 @@ const sectionTitle = {
   display: "flex", alignItems: "center", gap: 6,
 };
 
-function EventCard({ ev, members, onClick }) {
+function EventCard({ ev, members, onClick, dimmed }) {
   const cat = CATEGORIES.find(c => c.id === ev.category);
   const yesVotes = Object.values(ev.votes).filter(v => v === "yes").length;
   const total = members.length;
@@ -698,15 +744,16 @@ function EventCard({ ev, members, onClick }) {
       padding: "16px",
       marginBottom: 10,
       borderRadius: 20,
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.07)",
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid rgba(255,255,255,0.05)",
       cursor: "pointer",
       transition: "all 0.15s",
       backdropFilter: "blur(12px)",
       boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+      opacity: dimmed ? 0.55 : 1,
     }}
-      onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.055)"; e.currentTarget.style.borderColor = "rgba(124,111,247,0.25)"; }}
-      onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; }}
+      onMouseEnter={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.borderColor = "rgba(124,111,247,0.25)"; }}
+      onMouseLeave={e => { e.currentTarget.style.opacity = dimmed ? "0.55" : "1"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
         <div style={{
@@ -750,22 +797,49 @@ function EventCard({ ev, members, onClick }) {
 
 // ─── EVENT DETAIL ──────────────────────────────────────
 function EventDetail({ ev, members, onVote, onConfirm, onCancel, onMarkAbsent, onDelete, onBack }) {
+  const [copied, setCopied] = useState(false);
   const cat = CATEGORIES.find(c => c.id === ev.category);
   const yesVotes = Object.values(ev.votes).filter(v => v === "yes").length;
   const noVotes = Object.values(ev.votes).filter(v => v === "no").length;
   const maybeVotes = Object.values(ev.votes).filter(v => v === "maybe").length;
 
+  function handleShare() {
+    const url = `${window.location.origin}${window.location.pathname}?event=${ev.id}`;
+    if (navigator.share) {
+      navigator.share({ title: ev.title, text: `Vota el panorama: ${ev.title}`, url });
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  }
+
   return (
     <div style={{ paddingTop: 8 }}>
-      <button onClick={onBack} style={{
-        background: "rgba(124,111,247,0.1)",
-        border: "1px solid rgba(124,111,247,0.2)",
-        color: "#a5b4fc", cursor: "pointer", fontSize: 13,
-        fontFamily: "inherit", padding: "7px 14px", marginBottom: 16,
-        borderRadius: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6,
-      }}>
-        ← Volver
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <button onClick={onBack} style={{
+          background: "rgba(124,111,247,0.1)",
+          border: "1px solid rgba(124,111,247,0.2)",
+          color: "#a5b4fc", cursor: "pointer", fontSize: 13,
+          fontFamily: "inherit", padding: "7px 14px",
+          borderRadius: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6,
+        }}>
+          ← Volver
+        </button>
+        <button onClick={handleShare} style={{
+          marginLeft: "auto",
+          background: copied ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.05)",
+          border: copied ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(255,255,255,0.1)",
+          color: copied ? "#34d399" : "rgba(255,255,255,0.5)",
+          cursor: "pointer", fontSize: 13,
+          fontFamily: "inherit", padding: "7px 14px",
+          borderRadius: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6,
+          transition: "all 0.2s",
+        }}>
+          {copied ? "✓ Copiado" : "🔗 Compartir"}
+        </button>
+      </div>
 
       {/* Event header card */}
       <div style={{
